@@ -804,7 +804,6 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                   twofeedOwnedCount: 0,
                 });
               }}
-              placeholder="@ 없이 입력"
               style={inputStyle}
             />
           </div>
