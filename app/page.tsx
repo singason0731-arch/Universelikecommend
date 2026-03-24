@@ -983,7 +983,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                     fontWeight: 600,
                   }}
                 >
-                  링크 수정 불가
+                  신청 후 링크 수정 불가
                 </div>
 
                 {formType === "staff" && (
