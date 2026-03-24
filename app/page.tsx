@@ -2,6 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+function cleanInstagramLink(url: string) {
+  if (!url) return "";
+
+  try {
+    const parsed = new URL(url);
+
+    // 1. /? 이후 제거
+    let pathname = parsed.pathname;
+
+    // 2. reel → p 변환
+    if (pathname.startsWith("/reel/")) {
+      pathname = pathname.replace("/reel/", "/p/");
+    }
+
+    // 3. 마지막 / 보정
+    if (!pathname.endsWith("/")) {
+      pathname += "/";
+    }
+
+    return `https://www.instagram.com${pathname}`;
+  } catch {
+    return url;
+  }
+}
+
 type FormType =
   | "feed"
   | "volunteer"
@@ -380,8 +405,8 @@ export default function Home() {
           nickname,
           userId,
           formType,
-          link1: requiresLink1 ? link1.trim() : "",
-          link2: requiresLink2 ? link2.trim() : "",
+          link1: requiresLink1 ? cleanInstagramLink(link1.trim()) : "",
+link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
           isReels1: requiresLink1 ? isReels1 : false,
           isReels2: requiresLink2 ? isReels2 : false,
         }),
