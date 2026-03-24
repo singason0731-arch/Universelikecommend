@@ -783,7 +783,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                   twofeedOwnedCount: 0,
                 });
               }}
-              placeholder="닉네임을 입력합니다."
+              placeholder="닉네임을 입력"
               style={inputStyle}
             />
           </div>
@@ -804,7 +804,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                   twofeedOwnedCount: 0,
                 });
               }}
-              placeholder="@ 없이 입력해도 됩니다."
+              placeholder="@ 없이 입력"
               style={inputStyle}
             />
           </div>
@@ -873,7 +873,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
             <div style={{ fontSize: "17px", fontWeight: 900, lineHeight: 1.45 }}>
               {isSkipClosed
                 ? "스킵 신청이 마감되었습니다."
-                : `스킵 사용 가능 인원이 ${skipRemainingCount}명 남았습니다.`}
+                : `스킵 사용 가능 인원 : ${skipRemainingCount}명`}
             </div>
           </div>
         </section>
