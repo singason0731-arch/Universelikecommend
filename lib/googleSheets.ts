@@ -34,7 +34,7 @@ function getSheetsClient() {
 
 export async function getMemberRows(): Promise<string[][]> {
   const { sheets, spreadsheetId } = getSheetsClient();
-  const range = process.env.GOOGLE_SHEETS_MEMBER_RANGE || "좋댓별!C2:C";
+  const range = process.env.GOOGLE_SHEETS_MEMBER_RANGE || "'좋댓별1'!C2:C";
 
   const result = await sheets.spreadsheets.values.get({
     spreadsheetId,
@@ -49,7 +49,7 @@ export async function getMemberRowsWithItems(): Promise<MemberRow[]> {
 
   const result = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: "좋댓별!A2:C",
+    range: "'좋댓별1'!A2:C",
   });
 
   const rows = result.data.values || [];

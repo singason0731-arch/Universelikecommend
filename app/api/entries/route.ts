@@ -9,9 +9,15 @@ import {
 } from "@/lib/googleSheets";
 
 const SKIP_LIMIT = 7;
+const WEEKLY_SKIP_LIMIT = 2;
+const WEEKLY_TWOFEED_LIMIT = 3;
 
 function getSeoulDateTime() {
   const now = new Date();
+
+  const seoulDate = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Seoul" })
+  );
 
   const dateText = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
@@ -30,7 +36,7 @@ function getSeoulDateTime() {
   const [hour, minute] = timeText.split(":").map(Number);
   const currentMinutes = hour * 60 + minute;
 
-  return { now, dateText, currentMinutes };
+  return { now, seoulDate, dateText, currentMinutes };
 }
 
 function getSessionKey() {
@@ -50,6 +56,22 @@ function getSessionKey() {
     month: "2-digit",
     day: "2-digit",
   }).format(yesterday);
+}
+
+function getWeekKey() {
+  const { seoulDate } = getSeoulDateTime();
+
+  const date = new Date(seoulDate);
+  const day = date.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+
+  date.setDate(date.getDate() + diffToMonday);
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const dayOfMonth = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${dayOfMonth}`;
 }
 
 function isFormOpen() {
@@ -77,6 +99,33 @@ async function findMatchedMemberRow(nickname: string, userId: string) {
   });
 }
 
+async function getWeeklyUsageCount(userId: string, itemType: "skip" | "twofeed") {
+  const weekKey = getWeekKey();
+
+  const { data, error } = await supabase
+    .from("item_usages")
+    .select("id")
+    .eq("week_key", weekKey)
+    .eq("user_id", normalizeUserId(userId))
+    .eq("item_type", itemType);
+
+  if (error) throw error;
+
+  return data?.length ?? 0;
+}
+
+async function insertWeeklyUsage(userId: string, itemType: "skip" | "twofeed") {
+  const weekKey = getWeekKey();
+
+  const { error } = await supabase.from("item_usages").insert({
+    week_key: weekKey,
+    user_id: normalizeUserId(userId),
+    item_type: itemType,
+  });
+
+  if (error) throw error;
+}
+
 async function getSkipPermission(nickname: string, userId: string) {
   const matchedRow = await findMatchedMemberRow(nickname, userId);
 
@@ -93,6 +142,15 @@ async function getSkipPermission(nickname: string, userId: string) {
     return {
       ok: false,
       message: "보유하고 있는 스킵권이 없습니다.",
+    };
+  }
+
+  const weeklyUsedCount = await getWeeklyUsageCount(userId, "skip");
+
+  if (weeklyUsedCount >= WEEKLY_SKIP_LIMIT) {
+    return {
+      ok: false,
+      message: "이번주 아이템 사용가능 횟수가 마감되었습니다.",
     };
   }
 
@@ -121,6 +179,15 @@ async function getTwofeedPermission(nickname: string, userId: string) {
     };
   }
 
+  const weeklyUsedCount = await getWeeklyUsageCount(userId, "twofeed");
+
+  if (weeklyUsedCount >= WEEKLY_TWOFEED_LIMIT) {
+    return {
+      ok: false,
+      message: "이번주 아이템 사용가능 횟수가 마감되었습니다.",
+    };
+  }
+
   return {
     ok: true,
     message: `${nickname}님의 잔여 투피드권은 ${currentTwofeedCount - 1}개입니다.`,
@@ -139,7 +206,7 @@ export async function GET(request: Request) {
       .from("entries")
       .select("*")
       .eq("session_key", sessionKey)
-      .order("created_at", { ascending: false });
+      .order("created_at", { ascending: true });
 
     if (error) throw error;
 
@@ -197,6 +264,10 @@ export async function POST(request: Request) {
     const formType = String(body.formType || "").trim();
     const link1 = String(body.link1 || "").trim();
     const link2 = String(body.link2 || "").trim();
+
+    // ✅ 릴스 체크값 받기
+    const isReels1 = Boolean(body.isReels1);
+    const isReels2 = Boolean(body.isReels2);
 
     if (!nickname || !userId || !formType) {
       return NextResponse.json(
@@ -257,11 +328,15 @@ export async function POST(request: Request) {
           form_type: formType,
           link1: link1 || null,
           link2: link2 || null,
+          is_reels1: isReels1,
+          is_reels2: isReels2,
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      await insertWeeklyUsage(userId, "skip");
 
       const nextSkipCount = currentSkipCount + 1;
 
@@ -294,11 +369,15 @@ export async function POST(request: Request) {
           form_type: formType,
           link1: link1 || null,
           link2: link2 || null,
+          is_reels1: isReels1,
+          is_reels2: isReels2,
         })
         .select()
         .single();
 
       if (error) throw error;
+
+      await insertWeeklyUsage(userId, "twofeed");
 
       return NextResponse.json({
         ok: true,
@@ -319,6 +398,8 @@ export async function POST(request: Request) {
         form_type: formType,
         link1: link1 || null,
         link2: link2 || null,
+        is_reels1: isReels1,
+        is_reels2: isReels2,
       })
       .select()
       .single();

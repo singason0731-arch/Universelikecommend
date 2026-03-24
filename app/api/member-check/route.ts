@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
-  getMemberRows,
+  extractItemCount,
+  getMemberRowsWithItems,
   normalizeNickname,
   normalizeUserId,
   parseIdentityCell,
@@ -23,28 +24,34 @@ export async function POST(request: Request) {
       );
     }
 
-    const rows = await getMemberRows();
+    const rows = await getMemberRowsWithItems();
 
-    const matched = rows.some((row) => {
-      const cellValue = String(row[0] || "").trim();
-      if (!cellValue) return false;
-
-      const parsed = parseIdentityCell(cellValue);
+    const matchedRow = rows.find((row) => {
+      const parsed = parseIdentityCell(row.identityRaw);
       if (!parsed) return false;
 
       return parsed.nickname === nickname && parsed.userId === userId;
     });
 
-    if (!matched) {
+    if (!matchedRow) {
       return NextResponse.json({
         ok: false,
         message: "닉네임과 아이디가 시트에서 동일한 회원 정보로 확인되지 않습니다.",
       });
     }
 
+    const twofeedOwnedCount = extractItemCount(matchedRow.twofeedRaw);
+    const skipOwnedCount = extractItemCount(matchedRow.skipRaw);
+
     return NextResponse.json({
       ok: true,
       message: "회원 확인이 완료되었습니다.",
+      itemStatus: {
+        twofeedOwnedCount,
+        skipOwnedCount,
+        canUseTwofeed: twofeedOwnedCount > 0,
+        canUseSkip: skipOwnedCount > 0,
+      },
     });
   } catch (error: any) {
     console.error("POST /api/member-check error:", error);

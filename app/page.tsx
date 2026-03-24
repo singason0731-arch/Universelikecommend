@@ -22,6 +22,15 @@ type SubmissionItem = {
   link2: string;
   created_at?: string;
   createdAt?: string;
+  is_reels1?: boolean;
+  is_reels2?: boolean;
+};
+
+type ItemStatus = {
+  canUseSkip: boolean;
+  canUseTwofeed: boolean;
+  skipOwnedCount: number;
+  twofeedOwnedCount: number;
 };
 
 const SKIP_LIMIT = 7;
@@ -50,6 +59,8 @@ export default function Home() {
   const [userId, setUserId] = useState("");
   const [link1, setLink1] = useState("");
   const [link2, setLink2] = useState("");
+  const [isReels1, setIsReels1] = useState(false);
+  const [isReels2, setIsReels2] = useState(false);
   const [staffLinkCount, setStaffLinkCount] = useState<"1" | "2">("1");
   const [skipUsedCount, setSkipUsedCount] = useState(0);
 
@@ -61,10 +72,17 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
   const [authMessage, setAuthMessage] = useState("");
+  const [copyMessage, setCopyMessage] = useState("");
   const [showCollectedSection, setShowCollectedSection] = useState(false);
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [nowMinutes, setNowMinutes] = useState(getSeoulNowMinutes());
   const [alreadyParticipatedToday, setAlreadyParticipatedToday] = useState(false);
+  const [itemStatus, setItemStatus] = useState<ItemStatus>({
+    canUseSkip: false,
+    canUseTwofeed: false,
+    skipOwnedCount: 0,
+    twofeedOwnedCount: 0,
+  });
 
   const skipRemainingCount = SKIP_LIMIT - skipUsedCount;
   const isSkipClosed = skipRemainingCount <= 0;
@@ -81,62 +99,11 @@ export default function Home() {
     timeZone: "Asia/Seoul",
   }).format(new Date());
 
-  useEffect(() => {
-    const savedNickname = localStorage.getItem("memberNickname");
-    const savedUserId = localStorage.getItem("memberUserId");
-    const savedRemember = localStorage.getItem("rememberMember");
-
-    if (savedRemember === "true" && savedNickname && savedUserId) {
-      setNickname(savedNickname);
-      setUserId(savedUserId);
-      setRememberMe(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setNowMinutes(getSeoulNowMinutes());
-    }, 30000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const loadEntries = async () => {
-      try {
-        setIsLoadingEntries(true);
-
-        const query =
-          nickname.trim() && userId.trim()
-            ? `?nickname=${encodeURIComponent(nickname.trim())}&userId=${encodeURIComponent(
-                userId.trim()
-              )}`
-            : "";
-
-        const response = await fetch(`/api/entries${query}`, {
-          cache: "no-store",
-        });
-
-        const data = await response.json();
-
-        if (!response.ok || !data.ok) return;
-
-        setSubmissions(data.entries || []);
-        setSkipUsedCount(data.skipCount || 0);
-        setAlreadyParticipatedToday(!!data.alreadyParticipated);
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setIsLoadingEntries(false);
-      }
-    };
-
-    loadEntries();
-  }, [nickname, userId]);
-
   const resetLinks = () => {
     setLink1("");
     setLink2("");
+    setIsReels1(false);
+    setIsReels2(false);
     setStaffLinkCount("1");
   };
 
@@ -181,7 +148,7 @@ export default function Home() {
     nofeed: "링크 작성 없이 신청하면 됩니다.",
     "sub-feed": "부계 게시물 링크 1개를 작성하면 됩니다.",
     "sub-nofeed": "링크 작성 없이 신청하면 됩니다.",
-    "sub-volunteer": "링크 작성 없이 신청하면 됩니다.",
+    "sub-volunteer": "부계 봉사 신청",
     staff: "운영진은 링크 1개 또는 2개까지 선택 작성할 수 있습니다.",
   };
 
@@ -214,13 +181,57 @@ export default function Home() {
     return "";
   };
 
-  const handleVerifyMember = async () => {
+  const loadEntries = async (nicknameOverride?: string, userIdOverride?: string) => {
+    try {
+      setIsLoadingEntries(true);
+
+      const n = nicknameOverride ?? nickname;
+      const u = userIdOverride ?? userId;
+
+      const query =
+        n.trim() && u.trim()
+          ? `?nickname=${encodeURIComponent(n.trim())}&userId=${encodeURIComponent(u.trim())}`
+          : "";
+
+      const response = await fetch(`/api/entries${query}`, {
+        cache: "no-store",
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) return;
+
+      setSubmissions(data.entries || []);
+      setSkipUsedCount(data.skipCount || 0);
+      setAlreadyParticipatedToday(!!data.alreadyParticipated);
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsLoadingEntries(false);
+    }
+  };
+
+  const handleVerifyMember = async (
+    nicknameOverride?: string,
+    userIdOverride?: string,
+    rememberOverride?: boolean
+  ) => {
     setAuthMessage("");
     setErrorMessage("");
     setSuccessMessage("");
     setAlreadyParticipatedToday(false);
+    setItemStatus({
+      canUseSkip: false,
+      canUseTwofeed: false,
+      skipOwnedCount: 0,
+      twofeedOwnedCount: 0,
+    });
 
-    if (!nickname.trim() || !userId.trim()) {
+    const nextNickname = (nicknameOverride ?? nickname).trim();
+    const nextUserId = (userIdOverride ?? userId).trim();
+    const nextRemember = rememberOverride ?? rememberMe;
+
+    if (!nextNickname || !nextUserId) {
       setAuthMessage("닉네임과 아이디를 모두 입력해야 합니다.");
       setIsVerified(false);
       return;
@@ -235,8 +246,8 @@ export default function Home() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          nickname,
-          userId,
+          nickname: nextNickname,
+          userId: nextUserId,
         }),
       });
 
@@ -251,9 +262,13 @@ export default function Home() {
       setAuthMessage("회원 확인이 완료되었습니다.");
       setIsVerified(true);
 
-      if (rememberMe) {
-        localStorage.setItem("memberNickname", nickname.trim());
-        localStorage.setItem("memberUserId", userId.trim());
+      if (data.itemStatus) {
+        setItemStatus(data.itemStatus);
+      }
+
+      if (nextRemember) {
+        localStorage.setItem("memberNickname", nextNickname);
+        localStorage.setItem("memberUserId", nextUserId);
         localStorage.setItem("rememberMember", "true");
       } else {
         localStorage.removeItem("memberNickname");
@@ -261,23 +276,17 @@ export default function Home() {
         localStorage.removeItem("rememberMember");
       }
 
+      await loadEntries(nextNickname, nextUserId);
+
       const checkResponse = await fetch(
-        `/api/entries?nickname=${encodeURIComponent(nickname.trim())}&userId=${encodeURIComponent(
-          userId.trim()
-        )}`,
+        `/api/entries?nickname=${encodeURIComponent(nextNickname)}&userId=${encodeURIComponent(nextUserId)}`,
         { cache: "no-store" }
       );
       const checkData = await checkResponse.json();
 
-      if (checkResponse.ok && checkData.ok) {
-        setSubmissions(checkData.entries || []);
-        setSkipUsedCount(checkData.skipCount || 0);
-        setAlreadyParticipatedToday(!!checkData.alreadyParticipated);
-
-        if (checkData.alreadyParticipated) {
-          setSuccessMessage("오늘은 이미 참여완료 했어요.");
-          setShowCollectedSection(true);
-        }
+      if (checkResponse.ok && checkData.ok && checkData.alreadyParticipated) {
+        setSuccessMessage("오늘은 이미 참여완료 했어요.");
+        setShowCollectedSection(true);
       }
     } catch (error) {
       console.error(error);
@@ -287,6 +296,33 @@ export default function Home() {
       setIsVerifying(false);
     }
   };
+
+  useEffect(() => {
+    const savedNickname = localStorage.getItem("memberNickname");
+    const savedUserId = localStorage.getItem("memberUserId");
+    const savedRemember = localStorage.getItem("rememberMember");
+
+    if (savedRemember === "true" && savedNickname && savedUserId) {
+      setNickname(savedNickname);
+      setUserId(savedUserId);
+      setRememberMe(true);
+
+      setTimeout(() => {
+        handleVerifyMember(savedNickname, savedUserId, true);
+      }, 200);
+    } else {
+      loadEntries();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setNowMinutes(getSeoulNowMinutes());
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   const handleSubmit = async () => {
     setErrorMessage("");
@@ -313,6 +349,16 @@ export default function Home() {
       return;
     }
 
+    if (formType === "skip" && !itemStatus.canUseSkip) {
+      setErrorMessage("보유하고 있는 스킵권이 없습니다.");
+      return;
+    }
+
+    if (formType === "twofeed" && !itemStatus.canUseTwofeed) {
+      setErrorMessage("보유하고 있는 투피드권이 없습니다.");
+      return;
+    }
+
     if (formType === "skip" && isSkipClosed) {
       setErrorMessage("스킵 신청이 마감되었습니다.");
       return;
@@ -336,6 +382,8 @@ export default function Home() {
           formType,
           link1: requiresLink1 ? link1.trim() : "",
           link2: requiresLink2 ? link2.trim() : "",
+          isReels1: requiresLink1 ? isReels1 : false,
+          isReels2: requiresLink2 ? isReels2 : false,
         }),
       });
 
@@ -355,26 +403,79 @@ export default function Home() {
       setShowCollectedSection(true);
       setAlreadyParticipatedToday(true);
 
-      setLink1("");
-      setLink2("");
-      setStaffLinkCount("1");
+      resetLinks();
 
-      const refreshResponse = await fetch(
-        `/api/entries?nickname=${encodeURIComponent(nickname.trim())}&userId=${encodeURIComponent(
-          userId.trim()
-        )}`,
-        { cache: "no-store" }
-      );
-      const refreshData = await refreshResponse.json();
-
-      if (refreshResponse.ok && refreshData.ok) {
-        setSubmissions(refreshData.entries || []);
-        setSkipUsedCount(refreshData.skipCount || 0);
-        setAlreadyParticipatedToday(!!refreshData.alreadyParticipated);
-      }
+      await loadEntries(nickname, userId);
     } catch (error) {
       console.error(error);
       setErrorMessage("접수 중 오류가 발생했습니다.");
+    }
+  };
+
+  const sortedSubmissions = useMemo(() => {
+    return [...submissions].sort((a, b) => {
+      const typeA = a.form_type || a.formType;
+      const typeB = b.form_type || b.formType;
+
+      const isStaffA = typeA === "staff";
+      const isStaffB = typeB === "staff";
+
+      if (isStaffA && !isStaffB) return -1;
+      if (!isStaffA && isStaffB) return 1;
+
+      const timeA = new Date(a.created_at || a.createdAt || "").getTime();
+      const timeB = new Date(b.created_at || b.createdAt || "").getTime();
+
+      return timeA - timeB;
+    });
+  }, [submissions]);
+
+  const formattedCollectedText = useMemo(() => {
+    const staffCount = sortedSubmissions.filter(
+      (item) => (item.form_type || item.formType) === "staff"
+    ).length;
+
+    return sortedSubmissions
+      .map((item, index) => {
+        const type = item.form_type || item.formType;
+        const isStaff = type === "staff";
+
+        const displayIndex = isStaff ? 0 : index - staffCount + 1;
+
+        let typeLabel = "";
+        if (type === "skip") typeLabel = " (스킵)";
+        else if (type === "twofeed") typeLabel = " (투피드)";
+        else if (type === "volunteer") typeLabel = " (봉사)";
+        else if (type === "nofeed") typeLabel = " (노피드)";
+        else if (type === "sub-feed") typeLabel = " (부계 피드/릴스)";
+        else if (type === "sub-nofeed") typeLabel = " (부계 노피드)";
+        else if (type === "sub-volunteer") typeLabel = " (부계 봉사)";
+
+        let reelsCount = 0;
+        if (item.is_reels1) reelsCount++;
+        if (item.is_reels2) reelsCount++;
+
+        const reelsLabel = reelsCount === 0 ? "" : ` (${reelsCount} 릴스)`;
+
+        const lines = [`${displayIndex}. ${item.nickname}${typeLabel}${reelsLabel}`];
+
+        if (item.link1) lines.push(item.link1);
+        if (item.link2) lines.push(item.link2);
+
+        return lines.join("\n");
+      })
+      .join("\n\n");
+  }, [sortedSubmissions]);
+
+  const handleCopyCollectedText = async () => {
+    try {
+      await navigator.clipboard.writeText(formattedCollectedText);
+      setCopyMessage("복사되었습니다.");
+      setTimeout(() => setCopyMessage(""), 2000);
+    } catch (error) {
+      console.error(error);
+      setCopyMessage("복사에 실패했습니다.");
+      setTimeout(() => setCopyMessage(""), 2000);
     }
   };
 
@@ -466,6 +567,17 @@ export default function Home() {
     marginTop: "12px",
   };
 
+  const copyButtonStyle: React.CSSProperties = {
+    border: "1px solid #e7dfd3",
+    borderRadius: "12px",
+    padding: "10px 12px",
+    background: "#ffffff",
+    color: "#2a2a2a",
+    fontSize: "13px",
+    fontWeight: 800,
+    cursor: "pointer",
+  };
+
   const messageBox = (bg: string, border: string): React.CSSProperties => ({
     background: bg,
     border: `1px solid ${border}`,
@@ -486,8 +598,30 @@ export default function Home() {
 
       {showCollectedSection && (
         <section style={{ ...cardStyle, marginTop: "12px" }}>
-          <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "12px" }}>
-            현재까지 취합된 링크
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "10px",
+              marginBottom: "12px",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ fontSize: "14px", fontWeight: 800 }}>
+              현재까지 취합된 링크
+            </div>
+
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              {copyMessage ? (
+                <span style={{ fontSize: "12px", color: "#6d665d", fontWeight: 700 }}>
+                  {copyMessage}
+                </span>
+              ) : null}
+              <button type="button" onClick={handleCopyCollectedText} style={copyButtonStyle}>
+                전체 복사
+              </button>
+            </div>
           </div>
 
           {isLoadingEntries ? (
@@ -504,7 +638,7 @@ export default function Home() {
             >
               취합된 링크를 불러오는 중입니다.
             </div>
-          ) : submissions.length === 0 ? (
+          ) : sortedSubmissions.length === 0 ? (
             <div
               style={{
                 padding: "15px 14px",
@@ -531,36 +665,7 @@ export default function Home() {
                 color: "#2b2b2b",
               }}
             >
-              {submissions
-                .map((item, index) => {
-                  const currentFormType = item.form_type || item.formType;
-
-                  const typeLabel =
-                    currentFormType === "skip"
-                      ? " (스킵)"
-                      : currentFormType === "volunteer"
-                      ? " (봉사)"
-                      : currentFormType === "twofeed"
-                      ? " (투피드)"
-                      : currentFormType === "nofeed"
-                      ? " (노피드)"
-                      : currentFormType === "sub-feed"
-                      ? " (부계 피드/릴스)"
-                      : currentFormType === "sub-nofeed"
-                      ? " (부계 노피드)"
-                      : currentFormType === "sub-volunteer"
-                      ? " (부계 봉사)"
-                      : currentFormType === "staff"
-                      ? " (운영진)"
-                      : "";
-
-                  const lines = [`${index + 1}. ${item.nickname}${typeLabel}`];
-                  if (item.link1) lines.push(item.link1);
-                  if (item.link2) lines.push(item.link2);
-
-                  return lines.join("\n");
-                })
-                .join("\n\n")}
+              {formattedCollectedText}
             </div>
           )}
         </section>
@@ -650,6 +755,12 @@ export default function Home() {
                 setIsVerified(false);
                 setAuthMessage("");
                 setAlreadyParticipatedToday(false);
+                setItemStatus({
+                  canUseSkip: false,
+                  canUseTwofeed: false,
+                  skipOwnedCount: 0,
+                  twofeedOwnedCount: 0,
+                });
               }}
               placeholder="닉네임을 입력합니다."
               style={inputStyle}
@@ -665,6 +776,12 @@ export default function Home() {
                 setIsVerified(false);
                 setAuthMessage("");
                 setAlreadyParticipatedToday(false);
+                setItemStatus({
+                  canUseSkip: false,
+                  canUseTwofeed: false,
+                  skipOwnedCount: 0,
+                  twofeedOwnedCount: 0,
+                });
               }}
               placeholder="@ 없이 입력해도 됩니다."
               style={inputStyle}
@@ -690,7 +807,7 @@ export default function Home() {
 
           <button
             type="button"
-            onClick={handleVerifyMember}
+            onClick={() => handleVerifyMember()}
             style={primaryButtonStyle}
             disabled={isVerifying}
           >
@@ -791,13 +908,18 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => isFormOpen && !isSkipClosed && handleTabChange("skip")}
-                    style={toggleButtonStyle(formType === "skip", !isFormOpen || isSkipClosed)}
-                    disabled={!isFormOpen || isSkipClosed}
+                    onClick={() => !isSkipClosed && itemStatus.canUseSkip && handleTabChange("skip")}
+                    style={toggleButtonStyle(formType === "skip", isSkipClosed || !itemStatus.canUseSkip)}
+                    disabled={isSkipClosed || !itemStatus.canUseSkip}
                   >
                     스킵
                   </button>
-                  <button type="button" onClick={() => handleTabChange("twofeed")} style={toggleButtonStyle(formType === "twofeed")}>
+                  <button
+                    type="button"
+                    onClick={() => itemStatus.canUseTwofeed && handleTabChange("twofeed")}
+                    style={toggleButtonStyle(formType === "twofeed", !itemStatus.canUseTwofeed)}
+                    disabled={!itemStatus.canUseTwofeed}
+                  >
                     투피드
                   </button>
                   <button type="button" onClick={() => handleTabChange("nofeed")} style={toggleButtonStyle(formType === "nofeed")}>
@@ -853,6 +975,7 @@ export default function Home() {
                         onClick={() => {
                           setStaffLinkCount("1");
                           setLink2("");
+                          setIsReels2(false);
                           setErrorMessage("");
                         }}
                         style={toggleButtonStyle(staffLinkCount === "1")}
@@ -893,6 +1016,23 @@ export default function Home() {
                       placeholder="https:// 형태의 링크를 입력합니다."
                       style={inputStyle}
                     />
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "14px",
+                        marginTop: "10px",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isReels1}
+                        onChange={(e) => setIsReels1(e.target.checked)}
+                      />
+                      릴스
+                    </label>
                   </div>
                 )}
 
@@ -911,6 +1051,23 @@ export default function Home() {
                       placeholder="https:// 형태의 링크를 입력합니다."
                       style={inputStyle}
                     />
+
+                    <label
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "14px",
+                        marginTop: "10px",
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isReels2}
+                        onChange={(e) => setIsReels2(e.target.checked)}
+                      />
+                      릴스
+                    </label>
                   </div>
                 )}
 
