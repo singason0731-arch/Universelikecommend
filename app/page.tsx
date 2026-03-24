@@ -166,15 +166,15 @@ export default function Home() {
   };
 
   const formDescMap: Record<FormType, string> = {
-    feed: "게시물 링크 1개를 작성하면 됩니다.",
-    volunteer: "링크 작성 없이 신청하면 됩니다.",
-    skip: "내 게시물 링크를 등록하고 품앗이 참여는 스킵하는 유형입니다.",
-    twofeed: "게시물 링크 2개를 작성하면 됩니다.",
-    nofeed: "링크 작성 없이 신청하면 됩니다.",
-    "sub-feed": "부계 게시물 링크 1개를 작성하면 됩니다.",
-    "sub-nofeed": "링크 작성 없이 신청하면 됩니다.",
+    feed: "게시물 링크 1개 등록",
+    volunteer: "링크 작성 없이 신청",
+    skip: "내 게시물 링크를 등록하고 품앗이 참여는 스킵",
+    twofeed: "게시물 링크 2개를 작성",
+    nofeed: "링크 작성 없이 신청",
+    "sub-feed": "부계 게시물 링크 1개를 작성",
+    "sub-nofeed": "링크 작성 없이 신청",
     "sub-volunteer": "부계 봉사 신청",
-    staff: "운영진은 링크 1개 또는 2개까지 선택 작성할 수 있습니다.",
+    staff: "링크 1개 또는 2개까지 선택 작성 가능",
   };
 
   const isValidUrl = (value: string) => {
@@ -917,7 +917,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
             <>
               <section style={cardStyle}>
                 <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "12px" }}>
-                  신청 유형 선택
+                  참여 유형 선택
                 </div>
 
                 <div style={toggleWrapStyle}>
@@ -984,7 +984,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                     fontWeight: 600,
                   }}
                 >
-                  링크는 수정이 불가능합니다.
+                  링크 수정 불가
                 </div>
 
                 {formType === "staff" && (
@@ -1034,7 +1034,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                         setErrorMessage("");
                         setSuccessMessage("");
                       }}
-                      placeholder="https:// 형태의 링크를 입력합니다."
+                      placeholder="링크를 입력하세요"
                       style={inputStyle}
                     />
 
