@@ -721,7 +721,6 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
           </h1>
 
           <p style={{ margin: 0, color: "#6e675f", lineHeight: 1.7, fontSize: "14px" }}>
-            오늘 날짜와 접수 시간을 확인한 뒤 신청하면 됩니다.
           </p>
 
           <div
