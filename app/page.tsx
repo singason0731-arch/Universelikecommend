@@ -720,9 +720,6 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
             좋댓 신청 접수
           </h1>
 
-          <p style={{ margin: 0, color: "#6e675f", lineHeight: 1.7, fontSize: "14px" }}>
-          </p>
-
           <div
             style={{
               marginTop: "14px",
