@@ -279,12 +279,12 @@ export default function Home() {
       const data = await response.json();
 
       if (!response.ok || !data.ok) {
-        setAuthMessage(data.message || "회원 확인에 실패했습니다.");
+        setAuthMessage(data.message || "멤버 인증에 실패했습니다.");
         setIsVerified(false);
         return;
       }
 
-      setAuthMessage("회원 확인이 완료되었습니다.");
+      setAuthMessage("멤버 인증이 완료되었습니다.");
       setIsVerified(true);
 
       if (data.itemStatus) {
@@ -315,7 +315,7 @@ export default function Home() {
       }
     } catch (error) {
       console.error(error);
-      setAuthMessage("회원 확인 중 오류가 발생했습니다.");
+      setAuthMessage("인증에 오류가 발생했습니다.");
       setIsVerified(false);
     } finally {
       setIsVerifying(false);
@@ -354,7 +354,7 @@ export default function Home() {
     setSuccessMessage("");
 
     if (!isVerified) {
-      setErrorMessage("먼저 회원 확인을 완료해야 합니다.");
+      setErrorMessage("먼저 멤버 인증을 완료해야 합니다.");
       return;
     }
 
@@ -764,7 +764,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
 
         <section style={cardStyle}>
           <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "12px" }}>
-            회원 확인
+            멤버 인증
           </div>
 
           <div style={{ marginBottom: "12px" }}>
@@ -832,7 +832,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
             style={primaryButtonStyle}
             disabled={isVerifying}
           >
-            {isVerifying ? "확인 중입니다." : "회원 확인하기"}
+            {isVerifying ? "확인 중입니다." : "멤버 인증하기"}
           </button>
 
           {authMessage && (
@@ -1128,7 +1128,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
         ) : (
           <section style={cardStyle}>
             <div style={{ fontSize: "14px", lineHeight: 1.7, color: "#6d665d", fontWeight: 600 }}>
-              회원 확인이 완료되어야 접수 폼이 열립니다.
+              멤버 인증이 완료되어야 접수 폼이 열립니다.
             </div>
           </section>
         )}
