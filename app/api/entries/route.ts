@@ -12,6 +12,10 @@ const SKIP_LIMIT = 7;
 const WEEKLY_SKIP_LIMIT = 2;
 const WEEKLY_TWOFEED_LIMIT = 3;
 
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 function getSeoulDateTime() {
   const now = new Date();
 
@@ -231,13 +235,13 @@ export async function GET(request: Request) {
       sessionKey,
       alreadyParticipated,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("GET /api/entries error:", error);
 
     return NextResponse.json(
       {
         ok: false,
-        message: error?.message || "목록 조회 중 오류가 발생했습니다.",
+        message: getErrorMessage(error, "목록 조회 중 오류가 발생했습니다."),
       },
       { status: 500 }
     );
@@ -265,9 +269,10 @@ export async function POST(request: Request) {
     const link1 = String(body.link1 || "").trim();
     const link2 = String(body.link2 || "").trim();
 
-    // ✅ 릴스 체크값 받기
     const isReels1 = Boolean(body.isReels1);
     const isReels2 = Boolean(body.isReels2);
+    const isPublic1 = Boolean(body.isPublic1);
+    const isPublic2 = Boolean(body.isPublic2);
 
     if (!nickname || !userId || !formType) {
       return NextResponse.json(
@@ -330,6 +335,8 @@ export async function POST(request: Request) {
           link2: link2 || null,
           is_reels1: isReels1,
           is_reels2: isReels2,
+          is_public1: isPublic1,
+          is_public2: isPublic2,
         })
         .select()
         .single();
@@ -371,6 +378,8 @@ export async function POST(request: Request) {
           link2: link2 || null,
           is_reels1: isReels1,
           is_reels2: isReels2,
+          is_public1: isPublic1,
+          is_public2: isPublic2,
         })
         .select()
         .single();
@@ -400,6 +409,8 @@ export async function POST(request: Request) {
         link2: link2 || null,
         is_reels1: isReels1,
         is_reels2: isReels2,
+        is_public1: isPublic1,
+        is_public2: isPublic2,
       })
       .select()
       .single();
@@ -414,13 +425,13 @@ export async function POST(request: Request) {
       message: "정상적으로 접수되었습니다.",
       alreadyParticipated: true,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/entries error:", error);
 
     return NextResponse.json(
       {
         ok: false,
-        message: error?.message || "접수 저장 중 오류가 발생했습니다.",
+        message: getErrorMessage(error, "접수 저장 중 오류가 발생했습니다."),
       },
       { status: 500 }
     );

@@ -49,6 +49,8 @@ type SubmissionItem = {
   createdAt?: string;
   is_reels1?: boolean;
   is_reels2?: boolean;
+  is_public1?: boolean;
+  is_public2?: boolean;
 };
 
 type ItemStatus = {
@@ -86,6 +88,8 @@ export default function Home() {
   const [link2, setLink2] = useState("");
   const [isReels1, setIsReels1] = useState(false);
   const [isReels2, setIsReels2] = useState(false);
+  const [isPublic1, setIsPublic1] = useState(false);
+  const [isPublic2, setIsPublic2] = useState(false);
   const [staffLinkCount, setStaffLinkCount] = useState<"1" | "2">("1");
   const [skipUsedCount, setSkipUsedCount] = useState(0);
 
@@ -129,6 +133,8 @@ export default function Home() {
     setLink2("");
     setIsReels1(false);
     setIsReels2(false);
+    setIsPublic1(false);
+    setIsPublic2(false);
     setStaffLinkCount("1");
   };
 
@@ -406,9 +412,11 @@ export default function Home() {
           userId,
           formType,
           link1: requiresLink1 ? cleanInstagramLink(link1.trim()) : "",
-link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
+          link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
           isReels1: requiresLink1 ? isReels1 : false,
           isReels2: requiresLink2 ? isReels2 : false,
+          isPublic1: requiresLink1 ? isPublic1 : false,
+          isPublic2: requiresLink2 ? isPublic2 : false,
         }),
       });
 
@@ -480,9 +488,12 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
         if (item.is_reels1) reelsCount++;
         if (item.is_reels2) reelsCount++;
 
+        const publicLabel = item.is_public1 || item.is_public2 ? " (공게)" : "";
         const reelsLabel = reelsCount === 0 ? "" : ` (${reelsCount} 릴스)`;
 
-        const lines = [`${displayIndex}. ${item.nickname}${typeLabel}${reelsLabel}`];
+        const lines = [
+          `${displayIndex}. ${item.nickname}${typeLabel}${publicLabel}${reelsLabel}`,
+        ];
 
         if (item.link1) lines.push(item.link1);
         if (item.link2) lines.push(item.link2);
@@ -601,6 +612,21 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
     fontSize: "13px",
     fontWeight: 800,
     cursor: "pointer",
+  };
+
+  const checkboxRowStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "14px",
+    flexWrap: "wrap",
+    marginTop: "10px",
+  };
+
+  const checkboxLabelStyle: React.CSSProperties = {
+    display: "flex",
+    alignItems: "center",
+    gap: "8px",
+    fontSize: "14px",
   };
 
   const messageBox = (bg: string, border: string): React.CSSProperties => ({
@@ -996,6 +1022,7 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                           setStaffLinkCount("1");
                           setLink2("");
                           setIsReels2(false);
+                          setIsPublic2(false);
                           setErrorMessage("");
                         }}
                         style={toggleButtonStyle(staffLinkCount === "1")}
@@ -1037,22 +1064,25 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                       style={inputStyle}
                     />
 
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        fontSize: "14px",
-                        marginTop: "10px",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isReels1}
-                        onChange={(e) => setIsReels1(e.target.checked)}
-                      />
-                      릴스
-                    </label>
+                    <div style={checkboxRowStyle}>
+                      <label style={checkboxLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={isReels1}
+                          onChange={(e) => setIsReels1(e.target.checked)}
+                        />
+                        릴스
+                      </label>
+
+                      <label style={checkboxLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={isPublic1}
+                          onChange={(e) => setIsPublic1(e.target.checked)}
+                        />
+                        공게
+                      </label>
+                    </div>
                   </div>
                 )}
 
@@ -1072,22 +1102,25 @@ link2: requiresLink2 ? cleanInstagramLink(link2.trim()) : "",
                       style={inputStyle}
                     />
 
-                    <label
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "8px",
-                        fontSize: "14px",
-                        marginTop: "10px",
-                      }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isReels2}
-                        onChange={(e) => setIsReels2(e.target.checked)}
-                      />
-                      릴스
-                    </label>
+                    <div style={checkboxRowStyle}>
+                      <label style={checkboxLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={isReels2}
+                          onChange={(e) => setIsReels2(e.target.checked)}
+                        />
+                        릴스
+                      </label>
+
+                      <label style={checkboxLabelStyle}>
+                        <input
+                          type="checkbox"
+                          checked={isPublic2}
+                          onChange={(e) => setIsPublic2(e.target.checked)}
+                        />
+                        공게
+                      </label>
+                    </div>
                   </div>
                 )}
 
