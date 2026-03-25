@@ -16,6 +16,32 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }
 
+function buildEntryPayload(params: {
+  sessionKey: string;
+  nickname: string;
+  userId: string;
+  formType: string;
+  link1: string;
+  link2: string;
+  isReels1: boolean;
+  isReels2: boolean;
+  isPublic1: boolean;
+  isPublic2: boolean;
+}) {
+  return {
+    session_key: params.sessionKey,
+    nickname: params.nickname,
+    user_id: params.userId,
+    form_type: params.formType,
+    link1: params.link1 || null,
+    link2: params.link2 || null,
+    is_reels1: params.isReels1,
+    is_reels2: params.isReels2,
+    ...(params.isPublic1 ? { is_public1: true } : {}),
+    ...(params.isPublic2 ? { is_public2: true } : {}),
+  };
+}
+
 function getSeoulDateTime() {
   const now = new Date();
 
@@ -307,6 +333,19 @@ export async function POST(request: Request) {
     const currentSkipCount =
       existingEntries?.filter((item) => item.form_type === "skip").length ?? 0;
 
+    const entryPayload = buildEntryPayload({
+      sessionKey,
+      nickname,
+      userId,
+      formType,
+      link1,
+      link2,
+      isReels1,
+      isReels2,
+      isPublic1,
+      isPublic2,
+    });
+
     if (formType === "skip") {
       if (currentSkipCount >= SKIP_LIMIT) {
         return NextResponse.json(
@@ -326,18 +365,7 @@ export async function POST(request: Request) {
 
       const { data, error } = await supabase
         .from("entries")
-        .insert({
-          session_key: sessionKey,
-          nickname,
-          user_id: userId,
-          form_type: formType,
-          link1: link1 || null,
-          link2: link2 || null,
-          is_reels1: isReels1,
-          is_reels2: isReels2,
-          is_public1: isPublic1,
-          is_public2: isPublic2,
-        })
+        .insert(entryPayload)
         .select()
         .single();
 
@@ -369,18 +397,7 @@ export async function POST(request: Request) {
 
       const { data, error } = await supabase
         .from("entries")
-        .insert({
-          session_key: sessionKey,
-          nickname,
-          user_id: userId,
-          form_type: formType,
-          link1: link1 || null,
-          link2: link2 || null,
-          is_reels1: isReels1,
-          is_reels2: isReels2,
-          is_public1: isPublic1,
-          is_public2: isPublic2,
-        })
+        .insert(entryPayload)
         .select()
         .single();
 
@@ -400,18 +417,7 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabase
       .from("entries")
-      .insert({
-        session_key: sessionKey,
-        nickname,
-        user_id: userId,
-        form_type: formType,
-        link1: link1 || null,
-        link2: link2 || null,
-        is_reels1: isReels1,
-        is_reels2: isReels2,
-        is_public1: isPublic1,
-        is_public2: isPublic2,
-      })
+      .insert(entryPayload)
       .select()
       .single();
 
@@ -428,10 +434,16 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     console.error("POST /api/entries error:", error);
 
+    const message = getErrorMessage(error, "접수 저장 중 오류가 발생했습니다.");
+    const missingPublicColumn =
+      message.includes("is_public1") || message.includes("is_public2");
+
     return NextResponse.json(
       {
         ok: false,
-        message: getErrorMessage(error, "접수 저장 중 오류가 발생했습니다."),
+        message: missingPublicColumn
+          ? "공게 기능을 쓰려면 entries 테이블에 is_public1, is_public2 컬럼을 먼저 추가해야 합니다."
+          : message,
       },
       { status: 500 }
     );
