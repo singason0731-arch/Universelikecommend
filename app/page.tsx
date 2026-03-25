@@ -41,6 +41,8 @@ type FormType =
 type SubmissionItem = {
   id: string | number;
   nickname: string;
+  user_id?: string;
+  userId?: string;
   form_type?: FormType;
   formType?: FormType;
   link1: string;
@@ -472,6 +474,7 @@ export default function Home() {
       .map((item, index) => {
         const type = item.form_type || item.formType;
         const isStaff = type === "staff";
+        const displayUserId = item.user_id || item.userId || "";
 
         const displayIndex = isStaff ? 0 : index - staffCount + 1;
 
@@ -492,7 +495,7 @@ export default function Home() {
         const reelsLabel = reelsCount === 0 ? "" : ` (${reelsCount} 릴스)`;
 
         const lines = [
-          `${displayIndex}. ${item.nickname}${typeLabel}${publicLabel}${reelsLabel}`,
+          `${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}${typeLabel}${publicLabel}${reelsLabel}`,
         ];
 
         if (item.link1) lines.push(item.link1);
