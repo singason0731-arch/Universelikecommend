@@ -67,7 +67,6 @@ type ItemStatus = {
 const SKIP_LIMIT = 7;
 const OPEN_TIME = "14:30";
 const CLOSE_TIME = "22:00";
-const COMPLETE_CLOSE_TIME = "21:55";
 const ADMIN_PASSWORD = "0000";
 
 function parseTimeToMinutes(time: string) {
@@ -138,13 +137,11 @@ export default function Home() {
 
   const openMinutes = parseTimeToMinutes(OPEN_TIME);
   const closeMinutes = parseTimeToMinutes(CLOSE_TIME);
-  const completeCloseMinutes = parseTimeToMinutes(COMPLETE_CLOSE_TIME);
   const isFormOpen = nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
-  const isCompletionWindowOpen =
-    nowMinutes >= openMinutes && nowMinutes <= completeCloseMinutes;
+  const isCompletionWindowOpen = nowMinutes >= closeMinutes;
   const isPublicCollectedWindowOpen = nowMinutes >= closeMinutes;
   const isMemberCollectedWindowOpen =
-    nowMinutes >= openMinutes && nowMinutes <= completeCloseMinutes;
+    nowMinutes >= openMinutes && nowMinutes < closeMinutes;
   const canViewCollected =
     isAdminMode ||
     isPublicCollectedWindowOpen ||
@@ -555,9 +552,9 @@ export default function Home() {
     [collectedSubmissions]
   );
 
-  const submissionCounts = useMemo(() => {
+  const getSubmissionCounts = (items: SubmissionItem[]) => {
     const counts = {
-      total: collectedSubmissions.length,
+      total: items.length,
       staff: 0,
       feed: 0,
       skip: 0,
@@ -568,7 +565,7 @@ export default function Home() {
       volunteer: 0,
     };
 
-    collectedSubmissions.forEach((item) => {
+    items.forEach((item) => {
       const type = item.form_type || item.formType;
 
       if (type === "staff") counts.staff += 1;
@@ -582,20 +579,27 @@ export default function Home() {
     });
 
     return counts;
-  }, [collectedSubmissions]);
+  };
 
-  const formattedCollectedText = useMemo(() => {
+  const formatCollectedText = (items: SubmissionItem[]) => {
+    const counts = getSubmissionCounts(items);
+    const currentStaffCount = items.filter(
+      (item) => (item.form_type || item.formType) === "staff"
+    ).length;
     const summaryLines = [
-      `🏷총인원(${submissionCounts.total}명)`,
-      `운영진(${submissionCounts.staff}명) 피드/릴스(${submissionCounts.feed}명) 스킵(${submissionCounts.skip}명) 투피드(${submissionCounts.twofeed}명) 노피드(${submissionCounts.nofeed}명) 부계 피드/릴스(${submissionCounts.subFeed}명) 부계 노피드(${submissionCounts.subNofeed}명) 봉사(${submissionCounts.volunteer}명)`,
+      `🏷총인원(${counts.total}명)`,
+      `운영진(${counts.staff}명) 피드/릴스(${counts.feed}명) 스킵(${counts.skip}명) 투피드(${counts.twofeed}명) 노피드(${counts.nofeed}명) 부계 피드/릴스(${counts.subFeed}명) 부계 노피드(${counts.subNofeed}명) 봉사(${counts.volunteer}명)`,
     ];
 
-    const entryLines = collectedSubmissions.map((item, index) => {
+    const entryLines = items.map((item, index) => {
       const type = item.form_type || item.formType;
       const isStaff = type === "staff";
       const displayUserId = item.user_id || item.userId || "";
-      const displayIndex = isStaff ? 0 : index - staffSubmissionCount + 1;
-      const lines = [`${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}`];
+      const displayIndex = isStaff ? 0 : index - currentStaffCount + 1;
+      const completedLabel = isSubmissionCompleted(item) ? " (완료)" : "";
+      const lines = [
+        `${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}${completedLabel}`,
+      ];
 
       if (item.link1) lines.push(item.link1);
       if (item.link2) lines.push(item.link2);
@@ -604,7 +608,10 @@ export default function Home() {
     });
 
     return [...summaryLines, "", ...entryLines].join("\n\n");
-  }, [collectedSubmissions, staffSubmissionCount, submissionCounts]);
+  };
+
+  const formattedCollectedText = formatCollectedText(collectedSubmissions);
+  const formattedAdminCollectedText = formatCollectedText(sortedSubmissions);
 
   const handleAdminModeSubmit = () => {
     if (adminPassword !== ADMIN_PASSWORD) {
@@ -681,6 +688,21 @@ export default function Home() {
         return;
       }
 
+      const nextLink1 = editingLink1.trim() ? cleanInstagramLink(editingLink1.trim()) : "";
+      const nextLink2 = editingLink2.trim() ? cleanInstagramLink(editingLink2.trim()) : "";
+
+      setSubmissions((current) =>
+        current.map((submission) =>
+          submission.id === item.id
+            ? {
+                ...submission,
+                link1: nextLink1,
+                link2: nextLink2,
+              }
+            : submission
+        )
+      );
+
       setSuccessMessage(data.message || "운영진 링크 수정이 완료되었습니다.");
       resetAdminEditing();
       await loadEntries(nickname, userId);
@@ -699,7 +721,7 @@ export default function Home() {
     }
 
     if (!isCompletionWindowOpen) {
-      setErrorMessage("완료 처리는 오후 2시 30분부터 오후 9시 55분까지만 가능합니다.");
+      setErrorMessage("완료 처리는 오후 10시부터 가능합니다.");
       return;
     }
 
@@ -726,6 +748,17 @@ export default function Home() {
         return;
       }
 
+      setSubmissions((current) =>
+        current.map((submission) =>
+          submission.id === entryId
+            ? {
+                ...submission,
+                completed_at: new Date().toISOString(),
+              }
+            : submission
+        )
+      );
+
       setSuccessMessage(data.message || "완료 처리되었습니다.");
       await loadEntries(nickname, userId);
     } catch (error) {
@@ -738,7 +771,9 @@ export default function Home() {
 
   const handleCopyCollectedText = async () => {
     try {
-      await navigator.clipboard.writeText(formattedCollectedText);
+      await navigator.clipboard.writeText(
+        isAdminMode ? formattedAdminCollectedText : formattedCollectedText
+      );
       setCopyMessage("복사되었습니다.");
       setTimeout(() => setCopyMessage(""), 2000);
     } catch (error) {
@@ -883,11 +918,7 @@ export default function Home() {
       return "취합된 링크는 오후 2시 30분부터 확인할 수 있습니다.";
     }
 
-    if (nowMinutes > completeCloseMinutes && nowMinutes < closeMinutes) {
-      return "오후 10시부터는 로그인 없이 취합된 링크를 확인할 수 있습니다.";
-    }
-
-    return "오후 2시 30분부터 오후 9시 55분까지는 로그인한 멤버만 취합된 링크를 확인할 수 있습니다.";
+    return "오후 2시 30분부터 오후 10시 전까지는 로그인한 멤버만 취합된 링크를 확인할 수 있습니다.";
   };
 
   const renderCollectedSection = () => (
@@ -1131,39 +1162,57 @@ export default function Home() {
                               {publicLabel}
                               {reelsLabel}
                             </span>
-                            {isCompleted ? (
-                              <span style={{ marginLeft: "8px", color: "#8e887f", fontSize: "12px" }}>
-                                완료됨
-                              </span>
-                            ) : null}
                           </div>
 
                           {isOwnItem && hasSubmissionLinks(item) ? (
-                            isCompleted ? (
-                              <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 800 }}>
-                                완료 처리됨
-                              </div>
-                            ) : canCompleteThisItem ? (
+                            isCompleted ? null : canCompleteThisItem ? (
                               <button
                                 type="button"
                                 onClick={() => handleCompleteEntry(item.id)}
                                 disabled={completingEntryId === item.id}
                                 style={{
-                                  ...copyButtonStyle,
-                                  minWidth: "92px",
-                                  background:
-                                    completingEntryId === item.id ? "#f5f2ed" : "#ffffff",
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  border: "none",
+                                  padding: "0",
+                                  background: "transparent",
+                                  fontSize: "12px",
+                                  fontWeight: 700,
+                                  lineHeight: 1.2,
+                                  minWidth: "auto",
                                   color:
-                                    completingEntryId === item.id ? "#9b978f" : "#2a2a2a",
+                                    completingEntryId === item.id ? "#9b978f" : "#6d665d",
                                   cursor:
                                     completingEntryId === item.id ? "not-allowed" : "pointer",
                                 }}
                               >
-                                {completingEntryId === item.id ? "처리 중" : "완료"}
+                                <span
+                                  style={{
+                                    width: "16px",
+                                    height: "16px",
+                                    borderRadius: "4px",
+                                    border: `1px solid ${
+                                      completingEntryId === item.id ? "#c8c2b8" : "#8c8478"
+                                    }`,
+                                    display: "inline-flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    fontSize: "10px",
+                                    background:
+                                      completingEntryId === item.id ? "#f3efe8" : "#fffdfa",
+                                    color:
+                                      completingEntryId === item.id ? "#b0a89d" : "#6d665d",
+                                    flexShrink: 0,
+                                  }}
+                                >
+                                  {completingEntryId === item.id ? "..." : "완"}
+                                </span>
+                                <span>{completingEntryId === item.id ? "처리 중" : ""}</span>
                               </button>
                             ) : (
                               <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
-                                완료 가능 시간 아님
+                                오후 10시부터 가능
                               </div>
                             )
                           ) : null}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { hasSupabaseServiceRoleKey, supabaseServer } from "@/lib/supabase";
 import {
   extractItemCount,
   getMemberRowsWithItems,
@@ -13,7 +13,6 @@ const WEEKLY_SKIP_LIMIT = 2;
 const WEEKLY_TWOFEED_LIMIT = 3;
 const OPEN_MINUTES = 14 * 60 + 30;
 const CLOSE_MINUTES = 22 * 60;
-const COMPLETE_CLOSE_MINUTES = 21 * 60 + 55;
 const ADMIN_PASSWORD = "0000";
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -115,7 +114,7 @@ function isFormOpen() {
 
 function isCompletionWindowOpen() {
   const { currentMinutes } = getSeoulDateTime();
-  return currentMinutes >= OPEN_MINUTES && currentMinutes <= COMPLETE_CLOSE_MINUTES;
+  return currentMinutes >= CLOSE_MINUTES;
 }
 
 function isValidUrl(value: string) {
@@ -147,7 +146,7 @@ async function findMatchedMemberRow(nickname: string, userId: string) {
 async function getWeeklyUsageCount(userId: string, itemType: "skip" | "twofeed") {
   const weekKey = getWeekKey();
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseServer
     .from("item_usages")
     .select("id")
     .eq("week_key", weekKey)
@@ -162,7 +161,7 @@ async function getWeeklyUsageCount(userId: string, itemType: "skip" | "twofeed")
 async function insertWeeklyUsage(userId: string, itemType: "skip" | "twofeed") {
   const weekKey = getWeekKey();
 
-  const { error } = await supabase.from("item_usages").insert({
+  const { error } = await supabaseServer.from("item_usages").insert({
     week_key: weekKey,
     user_id: normalizeUserId(userId),
     item_type: itemType,
@@ -247,7 +246,7 @@ export async function GET(request: Request) {
     const nickname = String(searchParams.get("nickname") || "").trim();
     const userId = normalizeUserId(String(searchParams.get("userId") || "").trim());
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from("entries")
       .select("*")
       .eq("session_key", sessionKey)
@@ -304,7 +303,7 @@ export async function PATCH(request: Request) {
 
     const sessionKey = getSessionKey();
 
-    const { data: existingEntry, error: findError } = await supabase
+    const { data: existingEntry, error: findError } = await supabaseServer
       .from("entries")
       .select("id, user_id, form_type, link1, link2")
       .eq("id", entryId)
@@ -369,7 +368,7 @@ export async function PATCH(request: Request) {
         );
       }
 
-      const { error: updateError } = await supabase
+      const { error: updateError } = await supabaseServer
         .from("entries")
         .update({
           link1: nextLink1 || null,
@@ -390,8 +389,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          message:
-            "완료 처리는 오후 2시 30분부터 오후 9시 55분까지만 가능합니다.",
+          message: "완료 처리는 오후 10시부터 가능합니다.",
         },
         { status: 400 }
       );
@@ -420,7 +418,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const { error: updateError } = await supabase
+    const { error: updateError } = await supabaseServer
       .from("entries")
       .update({
         completed_at: new Date().toISOString(),
@@ -446,6 +444,11 @@ export async function PATCH(request: Request) {
         ok: false,
         message: missingCompletedColumn
           ? "완료 저장이 안 되고 있습니다. Supabase entries 테이블에 completed_at 컬럼이 실제로 추가됐는지 다시 확인해 주세요."
+          : !hasSupabaseServiceRoleKey &&
+            (message.toLowerCase().includes("row-level security") ||
+              message.toLowerCase().includes("permission denied") ||
+              message.toLowerCase().includes("violates row-level security"))
+          ? "현재 서버에 SUPABASE_SERVICE_ROLE_KEY가 없어 DB 정책에 막히고 있습니다. .env.local에 service role key를 추가해야 합니다."
           : message,
       },
       { status: 500 }
@@ -488,7 +491,7 @@ export async function POST(request: Request) {
 
     const sessionKey = getSessionKey();
 
-    const { data: existingEntries, error: countError } = await supabase
+    const { data: existingEntries, error: countError } = await supabaseServer
       .from("entries")
       .select("id, form_type, user_id")
       .eq("session_key", sessionKey);
@@ -542,7 +545,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServer
         .from("entries")
         .insert(entryPayload)
         .select()
@@ -574,7 +577,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const { data, error } = await supabase
+      const { data, error } = await supabaseServer
         .from("entries")
         .insert(entryPayload)
         .select()
@@ -594,7 +597,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const { data, error } = await supabase
+    const { data, error } = await supabaseServer
       .from("entries")
       .insert(entryPayload)
       .select()
@@ -622,6 +625,11 @@ export async function POST(request: Request) {
         ok: false,
         message: missingPublicColumn
           ? "공게 기능을 쓰려면 entries 테이블에 is_public1, is_public2 컬럼을 먼저 추가해야 합니다."
+          : !hasSupabaseServiceRoleKey &&
+            (message.toLowerCase().includes("row-level security") ||
+              message.toLowerCase().includes("permission denied") ||
+              message.toLowerCase().includes("violates row-level security"))
+          ? "현재 서버에 SUPABASE_SERVICE_ROLE_KEY가 없어 DB 정책에 막히고 있습니다. .env.local에 service role key를 추가해야 합니다."
           : message,
       },
       { status: 500 }
