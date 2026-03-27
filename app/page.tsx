@@ -508,13 +508,6 @@ export default function Home() {
     });
   }, [submissions]);
 
-  const staffSubmissionCount = useMemo(
-    () =>
-      sortedSubmissions.filter((item) => (item.form_type || item.formType) === "staff")
-        .length,
-    [sortedSubmissions]
-  );
-
   const getSubmissionTypeLabel = (item: SubmissionItem) => {
     const type = item.form_type || item.formType;
 
@@ -548,9 +541,23 @@ export default function Home() {
     return Boolean(normalizedCurrentUserId && entryUserId === normalizedCurrentUserId);
   };
 
+  const collectedSubmissions = useMemo(
+    () => sortedSubmissions.filter((item) => isSubmissionCompleted(item)),
+    [sortedSubmissions]
+  );
+
+  const visibleSubmissions = isAdminMode ? sortedSubmissions : collectedSubmissions;
+
+  const staffSubmissionCount = useMemo(
+    () =>
+      collectedSubmissions.filter((item) => (item.form_type || item.formType) === "staff")
+        .length,
+    [collectedSubmissions]
+  );
+
   const submissionCounts = useMemo(() => {
     const counts = {
-      total: sortedSubmissions.length,
+      total: collectedSubmissions.length,
       staff: 0,
       feed: 0,
       skip: 0,
@@ -561,7 +568,7 @@ export default function Home() {
       volunteer: 0,
     };
 
-    sortedSubmissions.forEach((item) => {
+    collectedSubmissions.forEach((item) => {
       const type = item.form_type || item.formType;
 
       if (type === "staff") counts.staff += 1;
@@ -575,7 +582,7 @@ export default function Home() {
     });
 
     return counts;
-  }, [sortedSubmissions]);
+  }, [collectedSubmissions]);
 
   const formattedCollectedText = useMemo(() => {
     const summaryLines = [
@@ -583,7 +590,7 @@ export default function Home() {
       `운영진(${submissionCounts.staff}명) 피드/릴스(${submissionCounts.feed}명) 스킵(${submissionCounts.skip}명) 투피드(${submissionCounts.twofeed}명) 노피드(${submissionCounts.nofeed}명) 부계 피드/릴스(${submissionCounts.subFeed}명) 부계 노피드(${submissionCounts.subNofeed}명) 봉사(${submissionCounts.volunteer}명)`,
     ];
 
-    const entryLines = sortedSubmissions.map((item, index) => {
+    const entryLines = collectedSubmissions.map((item, index) => {
       const type = item.form_type || item.formType;
       const isStaff = type === "staff";
       const displayUserId = item.user_id || item.userId || "";
@@ -597,7 +604,7 @@ export default function Home() {
     });
 
     return [...summaryLines, "", ...entryLines].join("\n\n");
-  }, [sortedSubmissions, staffSubmissionCount, submissionCounts]);
+  }, [collectedSubmissions, staffSubmissionCount, submissionCounts]);
 
   const handleAdminModeSubmit = () => {
     if (adminPassword !== ADMIN_PASSWORD) {
@@ -1050,7 +1057,7 @@ export default function Home() {
                 >
                   취합된 링크를 불러오는 중입니다.
                 </div>
-              ) : sortedSubmissions.length === 0 ? (
+              ) : visibleSubmissions.length === 0 ? (
                 <div
                   style={{
                     padding: "15px 14px",
@@ -1062,14 +1069,22 @@ export default function Home() {
                     lineHeight: 1.6,
                   }}
                 >
-                  아직 취합된 링크가 없습니다.
+                  {isAdminMode
+                    ? "아직 제출된 링크가 없습니다."
+                    : "아직 완료되어 취합된 링크가 없습니다."}
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: "10px" }}>
-                  {sortedSubmissions.map((item, index) => {
+                  {visibleSubmissions.map((item, index) => {
                     const type = item.form_type || item.formType;
                     const isStaff = type === "staff";
-                    const displayIndex = isStaff ? 0 : index - staffSubmissionCount + 1;
+                    const currentStaffCount = isAdminMode
+                      ? sortedSubmissions.filter(
+                          (submission) =>
+                            (submission.form_type || submission.formType) === "staff"
+                        ).length
+                      : staffSubmissionCount;
+                    const displayIndex = isStaff ? 0 : index - currentStaffCount + 1;
                     const displayUserId = item.user_id || item.userId || "";
                     const typeLabel = getSubmissionTypeLabel(item);
                     const publicLabel =
