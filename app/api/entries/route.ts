@@ -319,11 +319,8 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (action === "update") {
+    if (action === "update" || action === "uncomplete") {
       const adminPassword = String(body.adminPassword || "").trim();
-      const nextLink1 = String(body.link1 || "").trim();
-      const nextLink2 = String(body.link2 || "").trim();
-      const formType = String(existingEntry.form_type || "").trim();
 
       if (adminPassword !== ADMIN_PASSWORD) {
         return NextResponse.json(
@@ -331,6 +328,27 @@ export async function PATCH(request: Request) {
           { status: 403 }
         );
       }
+
+      if (action === "uncomplete") {
+        const { error: updateError } = await supabaseServer
+          .from("entries")
+          .update({
+            completed_at: null,
+          })
+          .eq("id", entryId)
+          .eq("session_key", sessionKey);
+
+        if (updateError) throw updateError;
+
+        return NextResponse.json({
+          ok: true,
+          message: "운영진이 완료 상태를 해제했습니다.",
+        });
+      }
+
+      const nextLink1 = String(body.link1 || "").trim();
+      const nextLink2 = String(body.link2 || "").trim();
+      const formType = String(existingEntry.form_type || "").trim();
 
       const requiresLink1 =
         formType === "feed" ||

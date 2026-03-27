@@ -764,6 +764,63 @@ export default function Home() {
     }
   };
 
+  const handleAdminUndoComplete = async (entryId: string | number) => {
+    if (!isAdminMode) {
+      setErrorMessage("운영진 모드에서만 완료 해제가 가능합니다.");
+      return;
+    }
+
+    if (!adminPassword) {
+      setErrorMessage("운영진 비밀번호를 다시 확인해 주세요.");
+      return;
+    }
+
+    try {
+      setCompletingEntryId(entryId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await fetch("/api/entries", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "uncomplete",
+          entryId,
+          adminPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setErrorMessage(data.message || "완료 해제 중 오류가 발생했습니다.");
+        return;
+      }
+
+      setSubmissions((current) =>
+        current.map((submission) =>
+          submission.id === entryId
+            ? {
+                ...submission,
+                completed_at: null,
+                completedAt: null,
+              }
+            : submission
+        )
+      );
+
+      setSuccessMessage(data.message || "운영진이 완료 상태를 해제했습니다.");
+      await loadEntries(nickname, userId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("완료 해제 중 오류가 발생했습니다.");
+    } finally {
+      setCompletingEntryId(null);
+    }
+  };
+
   const handleCopyCollectedText = async () => {
     try {
       await navigator.clipboard.writeText(
@@ -1172,7 +1229,7 @@ export default function Home() {
                                   border: "none",
                                   padding: "0",
                                   background: "transparent",
-                                  fontSize: "12px",
+                                  fontSize: "13px",
                                   fontWeight: 700,
                                   lineHeight: 1.2,
                                   minWidth: "auto",
@@ -1184,8 +1241,8 @@ export default function Home() {
                               >
                                 <span
                                   style={{
-                                    width: "16px",
-                                    height: "16px",
+                                    width: "21px",
+                                    height: "21px",
                                     borderRadius: "4px",
                                     border: `1px solid ${
                                       completingEntryId === item.id ? "#c8c2b8" : "#8c8478"
@@ -1193,7 +1250,7 @@ export default function Home() {
                                     display: "inline-flex",
                                     alignItems: "center",
                                     justifyContent: "center",
-                                    fontSize: "10px",
+                                    fontSize: "11px",
                                     background:
                                       completingEntryId === item.id ? "#f3efe8" : "#fffdfa",
                                     color:
@@ -1210,6 +1267,53 @@ export default function Home() {
                                 오후 10시부터 가능
                               </div>
                             )
+                          ) : null}
+
+                          {isAdminMode && isCompleted && hasSubmissionLinks(item) ? (
+                            <button
+                              type="button"
+                              onClick={() => handleAdminUndoComplete(item.id)}
+                              disabled={completingEntryId === item.id}
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                border: "none",
+                                padding: "0",
+                                background: "transparent",
+                                fontSize: "13px",
+                                fontWeight: 700,
+                                lineHeight: 1.2,
+                                minWidth: "auto",
+                                color:
+                                  completingEntryId === item.id ? "#9b978f" : "#6d665d",
+                                cursor:
+                                  completingEntryId === item.id ? "not-allowed" : "pointer",
+                              }}
+                            >
+                              <span
+                                style={{
+                                  width: "21px",
+                                  height: "21px",
+                                  borderRadius: "4px",
+                                  border: `1px solid ${
+                                    completingEntryId === item.id ? "#c8c2b8" : "#8c8478"
+                                  }`,
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  fontSize: "11px",
+                                  background:
+                                    completingEntryId === item.id ? "#f3efe8" : "#fffdfa",
+                                  color:
+                                    completingEntryId === item.id ? "#b0a89d" : "#6d665d",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {completingEntryId === item.id ? "..." : "완"}
+                              </span>
+                              <span>{completingEntryId === item.id ? "해제 중" : ""}</span>
+                            </button>
                           ) : null}
 
                           {isAdminMode && hasSubmissionLinks(item) ? (
