@@ -538,18 +538,13 @@ export default function Home() {
     return Boolean(normalizedCurrentUserId && entryUserId === normalizedCurrentUserId);
   };
 
-  const collectedSubmissions = useMemo(
-    () => sortedSubmissions.filter((item) => isSubmissionCompleted(item)),
-    [sortedSubmissions]
-  );
-
-  const visibleSubmissions = isAdminMode ? sortedSubmissions : collectedSubmissions;
+  const visibleSubmissions = sortedSubmissions;
 
   const staffSubmissionCount = useMemo(
     () =>
-      collectedSubmissions.filter((item) => (item.form_type || item.formType) === "staff")
+      visibleSubmissions.filter((item) => (item.form_type || item.formType) === "staff")
         .length,
-    [collectedSubmissions]
+    [visibleSubmissions]
   );
 
   const getSubmissionCounts = (items: SubmissionItem[]) => {
@@ -610,7 +605,7 @@ export default function Home() {
     return [...summaryLines, "", ...entryLines].join("\n\n");
   };
 
-  const formattedCollectedText = formatCollectedText(collectedSubmissions);
+  const formattedCollectedText = formatCollectedText(visibleSubmissions);
   const formattedAdminCollectedText = formatCollectedText(sortedSubmissions);
 
   const handleAdminModeSubmit = () => {
@@ -1102,7 +1097,7 @@ export default function Home() {
                 >
                   {isAdminMode
                     ? "아직 제출된 링크가 없습니다."
-                    : "아직 완료되어 취합된 링크가 없습니다."}
+                    : "아직 취합된 링크가 없습니다."}
                 </div>
               ) : (
                 <div style={{ display: "grid", gap: "10px" }}>
