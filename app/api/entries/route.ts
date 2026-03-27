@@ -11,6 +11,9 @@ import {
 const SKIP_LIMIT = 7;
 const WEEKLY_SKIP_LIMIT = 2;
 const WEEKLY_TWOFEED_LIMIT = 3;
+const OPEN_MINUTES = 14 * 60 + 30;
+const CLOSE_MINUTES = 22 * 60;
+const COMPLETE_CLOSE_MINUTES = 21 * 60 + 55;
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -71,7 +74,7 @@ function getSeoulDateTime() {
 
 function getSessionKey() {
   const { now, dateText, currentMinutes } = getSeoulDateTime();
-  const resetMinutes = 14 * 60 + 30;
+  const resetMinutes = OPEN_MINUTES;
 
   if (currentMinutes >= resetMinutes) {
     return dateText;
@@ -106,10 +109,12 @@ function getWeekKey() {
 
 function isFormOpen() {
   const { currentMinutes } = getSeoulDateTime();
-  const openMinutes = 14 * 60 + 30;
-  const closeMinutes = 22 * 60;
+  return currentMinutes >= OPEN_MINUTES && currentMinutes <= CLOSE_MINUTES;
+}
 
-  return currentMinutes >= openMinutes && currentMinutes <= closeMinutes;
+function isCompletionWindowOpen() {
+  const { currentMinutes } = getSeoulDateTime();
+  return currentMinutes >= OPEN_MINUTES && currentMinutes <= COMPLETE_CLOSE_MINUTES;
 }
 
 async function findMatchedMemberRow(nickname: string, userId: string) {
@@ -268,6 +273,102 @@ export async function GET(request: Request) {
       {
         ok: false,
         message: getErrorMessage(error, "목록 조회 중 오류가 발생했습니다."),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PATCH(request: Request) {
+  try {
+    if (!isCompletionWindowOpen()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          message:
+            "완료 처리는 오후 2시 30분부터 오후 9시 55분까지만 가능합니다.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const body = await request.json();
+    const entryId = body.entryId;
+    const userId = normalizeUserId(String(body.userId || "").trim());
+
+    if (!entryId || !userId) {
+      return NextResponse.json(
+        { ok: false, message: "완료 처리에 필요한 값이 비어 있습니다." },
+        { status: 400 }
+      );
+    }
+
+    const sessionKey = getSessionKey();
+
+    const { data: existingEntry, error: findError } = await supabase
+      .from("entries")
+      .select("id, user_id, link1, link2, completed_at")
+      .eq("id", entryId)
+      .eq("session_key", sessionKey)
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (!existingEntry) {
+      return NextResponse.json(
+        { ok: false, message: "해당 링크를 찾을 수 없습니다." },
+        { status: 404 }
+      );
+    }
+
+    if (String(existingEntry.user_id || "").trim() !== userId) {
+      return NextResponse.json(
+        { ok: false, message: "본인이 작성한 링크만 완료 처리할 수 있습니다." },
+        { status: 403 }
+      );
+    }
+
+    if (!existingEntry.link1 && !existingEntry.link2) {
+      return NextResponse.json(
+        { ok: false, message: "링크가 있는 신청만 완료 처리할 수 있습니다." },
+        { status: 400 }
+      );
+    }
+
+    if (existingEntry.completed_at) {
+      return NextResponse.json({
+        ok: true,
+        message: "이미 완료 처리된 링크입니다.",
+      });
+    }
+
+    const { error: updateError } = await supabase
+      .from("entries")
+      .update({
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", entryId)
+      .eq("session_key", sessionKey)
+      .eq("user_id", userId);
+
+    if (updateError) throw updateError;
+
+    return NextResponse.json({
+      ok: true,
+      message: "완료 처리되었습니다.",
+    });
+  } catch (error: unknown) {
+    console.error("PATCH /api/entries error:", error);
+
+    const message = getErrorMessage(error, "완료 처리 중 오류가 발생했습니다.");
+    const missingCompletedColumn = message.includes("completed_at");
+
+    return NextResponse.json(
+      {
+        ok: false,
+        message: missingCompletedColumn
+          ? "완료 기능을 쓰려면 entries 테이블에 completed_at 컬럼을 먼저 추가해야 합니다."
+          : message,
       },
       { status: 500 }
     );

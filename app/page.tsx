@@ -53,6 +53,8 @@ type SubmissionItem = {
   is_reels2?: boolean;
   is_public1?: boolean;
   is_public2?: boolean;
+  completed_at?: string | null;
+  completedAt?: string | null;
 };
 
 type ItemStatus = {
@@ -65,6 +67,7 @@ type ItemStatus = {
 const SKIP_LIMIT = 7;
 const OPEN_TIME = "14:30";
 const CLOSE_TIME = "22:00";
+const COMPLETE_CLOSE_TIME = "21:55";
 
 function parseTimeToMinutes(time: string) {
   const [hour, minute] = time.split(":").map(Number);
@@ -80,6 +83,12 @@ function getSeoulNowMinutes() {
   }).format(new Date());
 
   return parseTimeToMinutes(timeText);
+}
+
+function normalizeMemberUserId(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
 }
 
 export default function Home() {
@@ -108,6 +117,7 @@ export default function Home() {
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [nowMinutes, setNowMinutes] = useState(getSeoulNowMinutes());
   const [alreadyParticipatedToday, setAlreadyParticipatedToday] = useState(false);
+  const [completingEntryId, setCompletingEntryId] = useState<string | number | null>(null);
   const [itemStatus, setItemStatus] = useState<ItemStatus>({
     canUseSkip: false,
     canUseTwofeed: false,
@@ -120,7 +130,16 @@ export default function Home() {
 
   const openMinutes = parseTimeToMinutes(OPEN_TIME);
   const closeMinutes = parseTimeToMinutes(CLOSE_TIME);
+  const completeCloseMinutes = parseTimeToMinutes(COMPLETE_CLOSE_TIME);
   const isFormOpen = nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
+  const isCompletionWindowOpen =
+    nowMinutes >= openMinutes && nowMinutes <= completeCloseMinutes;
+  const isPublicCollectedWindowOpen = nowMinutes >= closeMinutes;
+  const isMemberCollectedWindowOpen =
+    nowMinutes >= openMinutes && nowMinutes <= completeCloseMinutes;
+  const canViewCollected =
+    isPublicCollectedWindowOpen || (isVerified && isMemberCollectedWindowOpen);
+  const normalizedCurrentUserId = normalizeMemberUserId(userId);
 
   const todayText = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -465,37 +484,60 @@ export default function Home() {
     });
   }, [submissions]);
 
-  const formattedCollectedText = useMemo(() => {
-    const staffCount = sortedSubmissions.filter(
-      (item) => (item.form_type || item.formType) === "staff"
-    ).length;
+  const staffSubmissionCount = useMemo(
+    () =>
+      sortedSubmissions.filter((item) => (item.form_type || item.formType) === "staff")
+        .length,
+    [sortedSubmissions]
+  );
 
+  const getSubmissionTypeLabel = (item: SubmissionItem) => {
+    const type = item.form_type || item.formType;
+
+    if (type === "skip") return " (스킵)";
+    if (type === "twofeed") return " (투피드)";
+    if (type === "volunteer") return " (봉사)";
+    if (type === "nofeed") return " (노피드)";
+    if (type === "sub-feed") return " (부계 피드/릴스)";
+    if (type === "sub-nofeed") return " (부계 노피드)";
+    if (type === "sub-volunteer") return " (부계 봉사)";
+
+    return "";
+  };
+
+  const getSubmissionReelsLabel = (item: SubmissionItem) => {
+    let reelsCount = 0;
+    if (item.is_reels1) reelsCount++;
+    if (item.is_reels2) reelsCount++;
+
+    return reelsCount === 0 ? "" : ` (${reelsCount} 릴스)`;
+  };
+
+  const isSubmissionCompleted = (item: SubmissionItem) =>
+    Boolean(item.completed_at || item.completedAt);
+
+  const hasSubmissionLinks = (item: SubmissionItem) =>
+    Boolean(item.link1?.trim() || item.link2?.trim());
+
+  const isOwnSubmission = (item: SubmissionItem) => {
+    const entryUserId = normalizeMemberUserId(item.user_id || item.userId || "");
+    return Boolean(normalizedCurrentUserId && entryUserId === normalizedCurrentUserId);
+  };
+
+  const formattedCollectedText = useMemo(() => {
     return sortedSubmissions
       .map((item, index) => {
         const type = item.form_type || item.formType;
         const isStaff = type === "staff";
         const displayUserId = item.user_id || item.userId || "";
-
-        const displayIndex = isStaff ? 0 : index - staffCount + 1;
-
-        let typeLabel = "";
-        if (type === "skip") typeLabel = " (스킵)";
-        else if (type === "twofeed") typeLabel = " (투피드)";
-        else if (type === "volunteer") typeLabel = " (봉사)";
-        else if (type === "nofeed") typeLabel = " (노피드)";
-        else if (type === "sub-feed") typeLabel = " (부계 피드/릴스)";
-        else if (type === "sub-nofeed") typeLabel = " (부계 노피드)";
-        else if (type === "sub-volunteer") typeLabel = " (부계 봉사)";
-
-        let reelsCount = 0;
-        if (item.is_reels1) reelsCount++;
-        if (item.is_reels2) reelsCount++;
-
+        const displayIndex = isStaff ? 0 : index - staffSubmissionCount + 1;
+        const typeLabel = getSubmissionTypeLabel(item);
         const publicLabel = item.is_public1 || item.is_public2 ? " (공게)" : "";
-        const reelsLabel = reelsCount === 0 ? "" : ` (${reelsCount} 릴스)`;
+        const reelsLabel = getSubmissionReelsLabel(item);
+        const completedLabel = isSubmissionCompleted(item) ? " [완료]" : "";
 
         const lines = [
-          `${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}${typeLabel}${publicLabel}${reelsLabel}`,
+          `${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}${typeLabel}${publicLabel}${reelsLabel}${completedLabel}`,
         ];
 
         if (item.link1) lines.push(item.link1);
@@ -504,7 +546,51 @@ export default function Home() {
         return lines.join("\n");
       })
       .join("\n\n");
-  }, [sortedSubmissions]);
+  }, [sortedSubmissions, staffSubmissionCount]);
+
+  const handleCompleteEntry = async (entryId: string | number) => {
+    if (!isVerified) {
+      setErrorMessage("멤버 인증 후 완료 처리할 수 있습니다.");
+      return;
+    }
+
+    if (!isCompletionWindowOpen) {
+      setErrorMessage("완료 처리는 오후 2시 30분부터 오후 9시 55분까지만 가능합니다.");
+      return;
+    }
+
+    try {
+      setCompletingEntryId(entryId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await fetch("/api/entries", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          entryId,
+          userId: normalizedCurrentUserId,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setErrorMessage(data.message || "완료 처리 중 오류가 발생했습니다.");
+        return;
+      }
+
+      setSuccessMessage(data.message || "완료 처리되었습니다.");
+      await loadEntries(nickname, userId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("완료 처리 중 오류가 발생했습니다.");
+    } finally {
+      setCompletingEntryId(null);
+    }
+  };
 
   const handleCopyCollectedText = async () => {
     try {
@@ -640,91 +726,239 @@ export default function Home() {
     marginBottom: "14px",
   });
 
+  const getCollectedAccessMessage = () => {
+    if (isPublicCollectedWindowOpen) {
+      return "오후 10시 이후에는 로그인 없이도 취합된 링크를 확인할 수 있습니다.";
+    }
+
+    if (nowMinutes < openMinutes) {
+      return "취합된 링크는 오후 2시 30분부터 확인할 수 있습니다.";
+    }
+
+    if (nowMinutes > completeCloseMinutes && nowMinutes < closeMinutes) {
+      return "오후 10시부터는 로그인 없이 취합된 링크를 확인할 수 있습니다.";
+    }
+
+    return "오후 2시 30분부터 오후 9시 55분까지는 로그인한 멤버만 취합된 링크를 확인할 수 있습니다.";
+  };
+
   const renderCollectedSection = () => (
-    <>
-      <button
-        type="button"
-        onClick={() => setShowCollectedSection((prev) => !prev)}
-        style={secondaryButtonStyle}
+    <section style={{ ...cardStyle, marginTop: "12px" }}>
+      <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "8px" }}>
+        취합된 링크 확인
+      </div>
+
+      <div
+        style={{
+          fontSize: "13px",
+          color: "#6d665d",
+          lineHeight: 1.7,
+          fontWeight: 600,
+          marginBottom: canViewCollected ? "12px" : "0",
+        }}
       >
-        현재까지 취합된 링크 확인하기
-      </button>
+        {getCollectedAccessMessage()}
+      </div>
 
-      {showCollectedSection && (
-        <section style={{ ...cardStyle, marginTop: "12px" }}>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              gap: "10px",
-              marginBottom: "12px",
-              flexWrap: "wrap",
-            }}
+      {!canViewCollected ? null : (
+        <>
+          <button
+            type="button"
+            onClick={() => setShowCollectedSection((prev) => !prev)}
+            style={secondaryButtonStyle}
           >
-            <div style={{ fontSize: "14px", fontWeight: 800 }}>
-              현재까지 취합된 링크
-            </div>
+            {showCollectedSection ? "취합된 링크 접기" : "현재까지 취합된 링크 확인하기"}
+          </button>
 
-            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-              {copyMessage ? (
-                <span style={{ fontSize: "12px", color: "#6d665d", fontWeight: 700 }}>
-                  {copyMessage}
-                </span>
-              ) : null}
-              <button type="button" onClick={handleCopyCollectedText} style={copyButtonStyle}>
-                전체 복사
-              </button>
-            </div>
-          </div>
+          {showCollectedSection && (
+            <section style={{ marginTop: "12px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "10px",
+                  marginBottom: "12px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <div style={{ fontSize: "14px", fontWeight: 800 }}>
+                  현재까지 취합된 링크
+                </div>
 
-          {isLoadingEntries ? (
-            <div
-              style={{
-                padding: "15px 14px",
-                borderRadius: "16px",
-                background: "#faf7f3",
-                border: "1px dashed #e7ddd0",
-                fontSize: "14px",
-                color: "#6f685f",
-                lineHeight: 1.6,
-              }}
-            >
-              취합된 링크를 불러오는 중입니다.
-            </div>
-          ) : sortedSubmissions.length === 0 ? (
-            <div
-              style={{
-                padding: "15px 14px",
-                borderRadius: "16px",
-                background: "#faf7f3",
-                border: "1px dashed #e7ddd0",
-                fontSize: "14px",
-                color: "#6f685f",
-                lineHeight: 1.6,
-              }}
-            >
-              아직 취합된 링크가 없습니다.
-            </div>
-          ) : (
-            <div
-              style={{
-                background: "#fffdfa",
-                border: "1px solid #eee7dd",
-                borderRadius: "16px",
-                padding: "16px 14px",
-                whiteSpace: "pre-wrap",
-                lineHeight: 1.8,
-                fontSize: "14px",
-                color: "#2b2b2b",
-              }}
-            >
-              {formattedCollectedText}
-            </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  {copyMessage ? (
+                    <span style={{ fontSize: "12px", color: "#6d665d", fontWeight: 700 }}>
+                      {copyMessage}
+                    </span>
+                  ) : null}
+                  <button type="button" onClick={handleCopyCollectedText} style={copyButtonStyle}>
+                    전체 복사
+                  </button>
+                </div>
+              </div>
+
+              {isLoadingEntries ? (
+                <div
+                  style={{
+                    padding: "15px 14px",
+                    borderRadius: "16px",
+                    background: "#faf7f3",
+                    border: "1px dashed #e7ddd0",
+                    fontSize: "14px",
+                    color: "#6f685f",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  취합된 링크를 불러오는 중입니다.
+                </div>
+              ) : sortedSubmissions.length === 0 ? (
+                <div
+                  style={{
+                    padding: "15px 14px",
+                    borderRadius: "16px",
+                    background: "#faf7f3",
+                    border: "1px dashed #e7ddd0",
+                    fontSize: "14px",
+                    color: "#6f685f",
+                    lineHeight: 1.6,
+                  }}
+                >
+                  아직 취합된 링크가 없습니다.
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: "10px" }}>
+                  {sortedSubmissions.map((item, index) => {
+                    const type = item.form_type || item.formType;
+                    const isStaff = type === "staff";
+                    const displayIndex = isStaff ? 0 : index - staffSubmissionCount + 1;
+                    const displayUserId = item.user_id || item.userId || "";
+                    const typeLabel = getSubmissionTypeLabel(item);
+                    const publicLabel =
+                      item.is_public1 || item.is_public2 ? " (공게)" : "";
+                    const reelsLabel = getSubmissionReelsLabel(item);
+                    const isCompleted = isSubmissionCompleted(item);
+                    const isOwnItem = isOwnSubmission(item);
+                    const canCompleteThisItem =
+                      isOwnItem && hasSubmissionLinks(item) && isCompletionWindowOpen && !isCompleted;
+                    const mutedTextStyle: React.CSSProperties = isCompleted
+                      ? {
+                          color: "#9b978f",
+                          textDecoration: "line-through",
+                        }
+                      : {
+                          color: "#2b2b2b",
+                        };
+
+                    return (
+                      <article
+                        key={String(item.id)}
+                        style={{
+                          background: "#fffdfa",
+                          border: "1px solid #eee7dd",
+                          borderRadius: "16px",
+                          padding: "14px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            justifyContent: "space-between",
+                            alignItems: "flex-start",
+                            gap: "12px",
+                            marginBottom: hasSubmissionLinks(item) ? "10px" : "0",
+                            flexWrap: "wrap",
+                          }}
+                        >
+                          <div style={{ fontSize: "14px", fontWeight: 800, lineHeight: 1.7 }}>
+                            <span style={isCompleted ? { color: "#8e887f" } : undefined}>
+                              {displayIndex}. {item.nickname}
+                              {displayUserId ? ` ${displayUserId}` : ""}
+                              {typeLabel}
+                              {publicLabel}
+                              {reelsLabel}
+                            </span>
+                            {isCompleted ? (
+                              <span style={{ marginLeft: "8px", color: "#8e887f", fontSize: "12px" }}>
+                                완료됨
+                              </span>
+                            ) : null}
+                          </div>
+
+                          {isOwnItem && hasSubmissionLinks(item) ? (
+                            isCompleted ? (
+                              <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 800 }}>
+                                완료 처리됨
+                              </div>
+                            ) : canCompleteThisItem ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCompleteEntry(item.id)}
+                                disabled={completingEntryId === item.id}
+                                style={{
+                                  ...copyButtonStyle,
+                                  minWidth: "92px",
+                                  background:
+                                    completingEntryId === item.id ? "#f5f2ed" : "#ffffff",
+                                  color:
+                                    completingEntryId === item.id ? "#9b978f" : "#2a2a2a",
+                                  cursor:
+                                    completingEntryId === item.id ? "not-allowed" : "pointer",
+                                }}
+                              >
+                                {completingEntryId === item.id ? "처리 중" : "완료"}
+                              </button>
+                            ) : (
+                              <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
+                                완료 가능 시간 아님
+                              </div>
+                            )
+                          ) : null}
+                        </div>
+
+                        <div style={{ display: "grid", gap: "6px" }}>
+                          {item.link1 ? (
+                            <a
+                              href={item.link1}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                ...mutedTextStyle,
+                                fontSize: "14px",
+                                lineHeight: 1.7,
+                                wordBreak: "break-all",
+                              }}
+                            >
+                              {item.link1}
+                            </a>
+                          ) : null}
+
+                          {item.link2 ? (
+                            <a
+                              href={item.link2}
+                              target="_blank"
+                              rel="noreferrer"
+                              style={{
+                                ...mutedTextStyle,
+                                fontSize: "14px",
+                                lineHeight: 1.7,
+                                wordBreak: "break-all",
+                              }}
+                            >
+                              {item.link2}
+                            </a>
+                          ) : null}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
           )}
-        </section>
+        </>
       )}
-    </>
+    </section>
   );
 
   return (
@@ -1161,11 +1395,17 @@ export default function Home() {
             </>
           )
         ) : (
-          <section style={cardStyle}>
-            <div style={{ fontSize: "14px", lineHeight: 1.7, color: "#6d665d", fontWeight: 600 }}>
-              멤버 인증이 완료되어야 접수 폼이 열립니다.
-            </div>
-          </section>
+          <>
+            <section style={cardStyle}>
+              <div style={{ fontSize: "14px", lineHeight: 1.7, color: "#6d665d", fontWeight: 600 }}>
+                멤버 인증이 완료되어야 접수 폼이 열립니다.
+                <br />
+                오후 10시 전까지는 취합된 링크도 로그인한 멤버만 확인할 수 있습니다.
+              </div>
+            </section>
+
+            {renderCollectedSection()}
+          </>
         )}
       </div>
     </main>

@@ -53,13 +53,16 @@ export async function POST(request: Request) {
         canUseSkip: skipOwnedCount > 0,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("POST /api/member-check error:", error);
 
     return NextResponse.json(
       {
         ok: false,
-        message: error?.message || "회원 확인 중 오류가 발생했습니다.",
+        message:
+          error instanceof Error
+            ? error.message
+            : "회원 확인 중 오류가 발생했습니다.",
       },
       { status: 500 }
     );
