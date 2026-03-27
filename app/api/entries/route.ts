@@ -14,6 +14,7 @@ const WEEKLY_TWOFEED_LIMIT = 3;
 const OPEN_MINUTES = 14 * 60 + 30;
 const CLOSE_MINUTES = 22 * 60;
 const COMPLETE_CLOSE_MINUTES = 21 * 60 + 55;
+const ADMIN_PASSWORD = "0000";
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
@@ -115,6 +116,15 @@ function isFormOpen() {
 function isCompletionWindowOpen() {
   const { currentMinutes } = getSeoulDateTime();
   return currentMinutes >= OPEN_MINUTES && currentMinutes <= COMPLETE_CLOSE_MINUTES;
+}
+
+function isValidUrl(value: string) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
 }
 
 async function findMatchedMemberRow(nickname: string, userId: string) {
@@ -281,6 +291,101 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
+    const body = await request.json();
+    const action = String(body.action || "complete").trim();
+    const entryId = body.entryId;
+
+    if (!entryId) {
+      return NextResponse.json(
+        { ok: false, message: "수정 또는 완료 처리에 필요한 값이 비어 있습니다." },
+        { status: 400 }
+      );
+    }
+
+    const sessionKey = getSessionKey();
+
+    const { data: existingEntry, error: findError } = await supabase
+      .from("entries")
+      .select("id, user_id, form_type, link1, link2, completed_at")
+      .eq("id", entryId)
+      .eq("session_key", sessionKey)
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (!existingEntry) {
+      return NextResponse.json(
+        { ok: false, message: "해당 링크를 찾을 수 없습니다." },
+        { status: 404 }
+      );
+    }
+
+    if (action === "update") {
+      const adminPassword = String(body.adminPassword || "").trim();
+      const nextLink1 = String(body.link1 || "").trim();
+      const nextLink2 = String(body.link2 || "").trim();
+      const formType = String(existingEntry.form_type || "").trim();
+
+      if (adminPassword !== ADMIN_PASSWORD) {
+        return NextResponse.json(
+          { ok: false, message: "운영진 비밀번호가 올바르지 않습니다." },
+          { status: 403 }
+        );
+      }
+
+      const requiresLink1 =
+        formType === "feed" ||
+        formType === "skip" ||
+        formType === "twofeed" ||
+        formType === "sub-feed" ||
+        formType === "staff";
+      const requiresLink2 = formType === "twofeed";
+
+      if (requiresLink1 && !nextLink1) {
+        return NextResponse.json(
+          { ok: false, message: "첫 번째 링크는 비워둘 수 없습니다." },
+          { status: 400 }
+        );
+      }
+
+      if (requiresLink2 && !nextLink2) {
+        return NextResponse.json(
+          { ok: false, message: "두 번째 링크는 비워둘 수 없습니다." },
+          { status: 400 }
+        );
+      }
+
+      if (nextLink1 && !isValidUrl(nextLink1)) {
+        return NextResponse.json(
+          { ok: false, message: "첫 번째 링크 형식이 올바르지 않습니다." },
+          { status: 400 }
+        );
+      }
+
+      if (nextLink2 && !isValidUrl(nextLink2)) {
+        return NextResponse.json(
+          { ok: false, message: "두 번째 링크 형식이 올바르지 않습니다." },
+          { status: 400 }
+        );
+      }
+
+      const { error: updateError } = await supabase
+        .from("entries")
+        .update({
+          link1: nextLink1 || null,
+          link2: nextLink2 || null,
+        })
+        .eq("id", entryId)
+        .eq("session_key", sessionKey);
+
+      if (updateError) throw updateError;
+
+      return NextResponse.json({
+        ok: true,
+        message: "운영진 링크 수정이 완료되었습니다.",
+      });
+    }
+
     if (!isCompletionWindowOpen()) {
       return NextResponse.json(
         {
@@ -292,32 +397,12 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const body = await request.json();
-    const entryId = body.entryId;
     const userId = normalizeUserId(String(body.userId || "").trim());
 
-    if (!entryId || !userId) {
+    if (!userId) {
       return NextResponse.json(
         { ok: false, message: "완료 처리에 필요한 값이 비어 있습니다." },
         { status: 400 }
-      );
-    }
-
-    const sessionKey = getSessionKey();
-
-    const { data: existingEntry, error: findError } = await supabase
-      .from("entries")
-      .select("id, user_id, link1, link2, completed_at")
-      .eq("id", entryId)
-      .eq("session_key", sessionKey)
-      .maybeSingle();
-
-    if (findError) throw findError;
-
-    if (!existingEntry) {
-      return NextResponse.json(
-        { ok: false, message: "해당 링크를 찾을 수 없습니다." },
-        { status: 404 }
       );
     }
 

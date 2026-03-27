@@ -68,6 +68,7 @@ const SKIP_LIMIT = 7;
 const OPEN_TIME = "14:30";
 const CLOSE_TIME = "22:00";
 const COMPLETE_CLOSE_TIME = "21:55";
+const ADMIN_PASSWORD = "0000";
 
 function parseTimeToMinutes(time: string) {
   const [hour, minute] = time.split(":").map(Number);
@@ -118,6 +119,13 @@ export default function Home() {
   const [nowMinutes, setNowMinutes] = useState(getSeoulNowMinutes());
   const [alreadyParticipatedToday, setAlreadyParticipatedToday] = useState(false);
   const [completingEntryId, setCompletingEntryId] = useState<string | number | null>(null);
+  const [adminPassword, setAdminPassword] = useState("");
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState<string | number | null>(null);
+  const [editingLink1, setEditingLink1] = useState("");
+  const [editingLink2, setEditingLink2] = useState("");
+  const [isSavingAdminEdit, setIsSavingAdminEdit] = useState(false);
   const [itemStatus, setItemStatus] = useState<ItemStatus>({
     canUseSkip: false,
     canUseTwofeed: false,
@@ -138,7 +146,9 @@ export default function Home() {
   const isMemberCollectedWindowOpen =
     nowMinutes >= openMinutes && nowMinutes <= completeCloseMinutes;
   const canViewCollected =
-    isPublicCollectedWindowOpen || (isVerified && isMemberCollectedWindowOpen);
+    isAdminMode ||
+    isPublicCollectedWindowOpen ||
+    (isVerified && isMemberCollectedWindowOpen);
   const normalizedCurrentUserId = normalizeMemberUserId(userId);
 
   const todayText = new Intl.DateTimeFormat("ko-KR", {
@@ -157,6 +167,13 @@ export default function Home() {
     setIsPublic1(false);
     setIsPublic2(false);
     setStaffLinkCount("1");
+  };
+
+  const resetAdminEditing = () => {
+    setEditingEntryId(null);
+    setEditingLink1("");
+    setEditingLink2("");
+    setIsSavingAdminEdit(false);
   };
 
   const handleTabChange = (nextType: FormType) => {
@@ -353,6 +370,7 @@ export default function Home() {
     const savedNickname = localStorage.getItem("memberNickname");
     const savedUserId = localStorage.getItem("memberUserId");
     const savedRemember = localStorage.getItem("rememberMember");
+    const savedAdminMode = localStorage.getItem("adminMode");
 
     if (savedRemember === "true" && savedNickname && savedUserId) {
       setNickname(savedNickname);
@@ -364,6 +382,12 @@ export default function Home() {
       }, 200);
     } else {
       loadEntries();
+    }
+
+    if (savedAdminMode === "true") {
+      setIsAdminMode(true);
+      setAdminPassword(ADMIN_PASSWORD);
+      setShowAdminPanel(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -524,29 +548,142 @@ export default function Home() {
     return Boolean(normalizedCurrentUserId && entryUserId === normalizedCurrentUserId);
   };
 
+  const submissionCounts = useMemo(() => {
+    const counts = {
+      total: sortedSubmissions.length,
+      staff: 0,
+      feed: 0,
+      skip: 0,
+      twofeed: 0,
+      nofeed: 0,
+      subFeed: 0,
+      subNofeed: 0,
+      volunteer: 0,
+    };
+
+    sortedSubmissions.forEach((item) => {
+      const type = item.form_type || item.formType;
+
+      if (type === "staff") counts.staff += 1;
+      else if (type === "feed") counts.feed += 1;
+      else if (type === "skip") counts.skip += 1;
+      else if (type === "twofeed") counts.twofeed += 1;
+      else if (type === "nofeed") counts.nofeed += 1;
+      else if (type === "sub-feed") counts.subFeed += 1;
+      else if (type === "sub-nofeed") counts.subNofeed += 1;
+      else if (type === "volunteer" || type === "sub-volunteer") counts.volunteer += 1;
+    });
+
+    return counts;
+  }, [sortedSubmissions]);
+
   const formattedCollectedText = useMemo(() => {
-    return sortedSubmissions
-      .map((item, index) => {
-        const type = item.form_type || item.formType;
-        const isStaff = type === "staff";
-        const displayUserId = item.user_id || item.userId || "";
-        const displayIndex = isStaff ? 0 : index - staffSubmissionCount + 1;
-        const typeLabel = getSubmissionTypeLabel(item);
-        const publicLabel = item.is_public1 || item.is_public2 ? " (공게)" : "";
-        const reelsLabel = getSubmissionReelsLabel(item);
-        const completedLabel = isSubmissionCompleted(item) ? " [완료]" : "";
+    const summaryLines = [
+      `🏷총인원(${submissionCounts.total}명)`,
+      `운영진(${submissionCounts.staff}명) 피드/릴스(${submissionCounts.feed}명) 스킵(${submissionCounts.skip}명) 투피드(${submissionCounts.twofeed}명) 노피드(${submissionCounts.nofeed}명) 부계 피드/릴스(${submissionCounts.subFeed}명) 부계 노피드(${submissionCounts.subNofeed}명) 봉사(${submissionCounts.volunteer}명)`,
+    ];
 
-        const lines = [
-          `${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}${typeLabel}${publicLabel}${reelsLabel}${completedLabel}`,
-        ];
+    const entryLines = sortedSubmissions.map((item, index) => {
+      const type = item.form_type || item.formType;
+      const isStaff = type === "staff";
+      const displayUserId = item.user_id || item.userId || "";
+      const displayIndex = isStaff ? 0 : index - staffSubmissionCount + 1;
+      const lines = [`${displayIndex}. ${item.nickname}${displayUserId ? ` ${displayUserId}` : ""}`];
 
-        if (item.link1) lines.push(item.link1);
-        if (item.link2) lines.push(item.link2);
+      if (item.link1) lines.push(item.link1);
+      if (item.link2) lines.push(item.link2);
 
-        return lines.join("\n");
-      })
-      .join("\n\n");
-  }, [sortedSubmissions, staffSubmissionCount]);
+      return lines.join("\n");
+    });
+
+    return [...summaryLines, "", ...entryLines].join("\n\n");
+  }, [sortedSubmissions, staffSubmissionCount, submissionCounts]);
+
+  const handleAdminModeSubmit = () => {
+    if (adminPassword !== ADMIN_PASSWORD) {
+      setErrorMessage("운영진 비밀번호가 올바르지 않습니다.");
+      return;
+    }
+
+    setErrorMessage("");
+    setSuccessMessage("운영진 모드가 활성화되었습니다.");
+    setIsAdminMode(true);
+    setShowAdminPanel(true);
+    localStorage.setItem("adminMode", "true");
+  };
+
+  const handleAdminModeExit = () => {
+    setIsAdminMode(false);
+    setAdminPassword("");
+    resetAdminEditing();
+    localStorage.removeItem("adminMode");
+  };
+
+  const handleStartAdminEdit = (item: SubmissionItem) => {
+    setEditingEntryId(item.id);
+    setEditingLink1(item.link1 || "");
+    setEditingLink2(item.link2 || "");
+    setErrorMessage("");
+    setSuccessMessage("");
+  };
+
+  const handleSaveAdminEdit = async (item: SubmissionItem) => {
+    if (!isAdminMode) {
+      setErrorMessage("운영진 모드에서만 링크를 수정할 수 있습니다.");
+      return;
+    }
+
+    if (!adminPassword) {
+      setErrorMessage("운영진 비밀번호를 다시 확인해 주세요.");
+      return;
+    }
+
+    if (editingLink1.trim() && !isValidUrl(editingLink1.trim())) {
+      setErrorMessage("첫 번째 링크 형식이 올바르지 않습니다.");
+      return;
+    }
+
+    if (editingLink2.trim() && !isValidUrl(editingLink2.trim())) {
+      setErrorMessage("두 번째 링크 형식이 올바르지 않습니다.");
+      return;
+    }
+
+    try {
+      setIsSavingAdminEdit(true);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await fetch("/api/entries", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "update",
+          entryId: item.id,
+          adminPassword,
+          link1: editingLink1.trim() ? cleanInstagramLink(editingLink1.trim()) : "",
+          link2: editingLink2.trim() ? cleanInstagramLink(editingLink2.trim()) : "",
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setErrorMessage(data.message || "운영진 링크 수정 중 오류가 발생했습니다.");
+        return;
+      }
+
+      setSuccessMessage(data.message || "운영진 링크 수정이 완료되었습니다.");
+      resetAdminEditing();
+      await loadEntries(nickname, userId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("운영진 링크 수정 중 오류가 발생했습니다.");
+    } finally {
+      setIsSavingAdminEdit(false);
+    }
+  };
 
   const handleCompleteEntry = async (entryId: string | number) => {
     if (!isVerified) {
@@ -727,6 +864,10 @@ export default function Home() {
   });
 
   const getCollectedAccessMessage = () => {
+    if (isAdminMode) {
+      return "운영진 모드에서는 시간과 관계없이 링크 확인, 취합, 수정이 가능합니다.";
+    }
+
     if (isPublicCollectedWindowOpen) {
       return "오후 10시 이후에는 로그인 없이도 취합된 링크를 확인할 수 있습니다.";
     }
@@ -744,8 +885,27 @@ export default function Home() {
 
   const renderCollectedSection = () => (
     <section style={{ ...cardStyle, marginTop: "12px" }}>
-      <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "8px" }}>
-        취합된 링크 확인
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          gap: "10px",
+          flexWrap: "wrap",
+          marginBottom: "8px",
+        }}
+      >
+        <div style={{ fontSize: "14px", fontWeight: 800 }}>
+          취합된 링크 확인
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setShowAdminPanel((prev) => !prev)}
+          style={copyButtonStyle}
+        >
+          운영진
+        </button>
       </div>
 
       <div
@@ -759,6 +919,84 @@ export default function Home() {
       >
         {getCollectedAccessMessage()}
       </div>
+
+      {showAdminPanel ? (
+        <div
+          style={{
+            marginTop: "12px",
+            padding: "14px",
+            borderRadius: "16px",
+            background: isAdminMode ? "#fff7e8" : "#faf7f3",
+            border: isAdminMode ? "1px solid #f0d9a8" : "1px solid #e7ddd0",
+          }}
+        >
+          <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "8px" }}>
+            운영진 모드
+          </div>
+
+          {isAdminMode ? (
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "10px",
+                flexWrap: "wrap",
+              }}
+            >
+              <div style={{ fontSize: "13px", color: "#6d665d", lineHeight: 1.6, fontWeight: 600 }}>
+                운영진 모드가 활성화되어 링크 수정이 가능합니다.
+              </div>
+
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button type="button" onClick={handleAdminModeExit} style={copyButtonStyle}>
+                  운영진 모드 종료
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPanel(false)}
+                  style={copyButtonStyle}
+                >
+                  닫기
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={{ fontSize: "13px", color: "#6d665d", lineHeight: 1.6, fontWeight: 600 }}>
+                운영진 비밀번호를 입력하면 모든 링크를 수정할 수 있습니다.
+              </div>
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "8px",
+                  marginTop: "10px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <input
+                  type="password"
+                  value={adminPassword}
+                  onChange={(e) => setAdminPassword(e.target.value)}
+                  placeholder="운영진 비밀번호"
+                  style={{ ...inputStyle, flex: "1 1 220px", minHeight: "46px" }}
+                />
+                <button type="button" onClick={handleAdminModeSubmit} style={copyButtonStyle}>
+                  운영진 모드 열기
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowAdminPanel(false)}
+                  style={copyButtonStyle}
+                >
+                  닫기
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
 
       {!canViewCollected ? null : (
         <>
@@ -914,41 +1152,100 @@ export default function Home() {
                               </div>
                             )
                           ) : null}
-                        </div>
 
-                        <div style={{ display: "grid", gap: "6px" }}>
-                          {item.link1 ? (
-                            <a
-                              href={item.link1}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{
-                                ...mutedTextStyle,
-                                fontSize: "14px",
-                                lineHeight: 1.7,
-                                wordBreak: "break-all",
-                              }}
-                            >
-                              {item.link1}
-                            </a>
-                          ) : null}
-
-                          {item.link2 ? (
-                            <a
-                              href={item.link2}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{
-                                ...mutedTextStyle,
-                                fontSize: "14px",
-                                lineHeight: 1.7,
-                                wordBreak: "break-all",
-                              }}
-                            >
-                              {item.link2}
-                            </a>
+                          {isAdminMode && hasSubmissionLinks(item) ? (
+                            editingEntryId === item.id ? (
+                              <div style={{ fontSize: "12px", color: "#7a5f2d", fontWeight: 800 }}>
+                                수정 중
+                              </div>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => handleStartAdminEdit(item)}
+                                style={copyButtonStyle}
+                              >
+                                운영진 수정
+                              </button>
+                            )
                           ) : null}
                         </div>
+
+                        {isAdminMode && editingEntryId === item.id ? (
+                          <div style={{ display: "grid", gap: "8px" }}>
+                            <input
+                              value={editingLink1}
+                              onChange={(e) => setEditingLink1(e.target.value)}
+                              placeholder="첫 번째 링크"
+                              style={{ ...inputStyle, minHeight: "44px" }}
+                            />
+
+                            <input
+                              value={editingLink2}
+                              onChange={(e) => setEditingLink2(e.target.value)}
+                              placeholder="두 번째 링크가 없으면 비워두세요"
+                              style={{ ...inputStyle, minHeight: "44px" }}
+                            />
+
+                            <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveAdminEdit(item)}
+                                disabled={isSavingAdminEdit}
+                                style={{
+                                  ...copyButtonStyle,
+                                  background: "#1f1f1f",
+                                  color: "#ffffff",
+                                  border: "1px solid #1f1f1f",
+                                  cursor: isSavingAdminEdit ? "not-allowed" : "pointer",
+                                }}
+                              >
+                                {isSavingAdminEdit ? "저장 중" : "수정 저장"}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={resetAdminEditing}
+                                style={copyButtonStyle}
+                              >
+                                취소
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: "grid", gap: "6px" }}>
+                            {item.link1 ? (
+                              <a
+                                href={item.link1}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  ...mutedTextStyle,
+                                  fontSize: "14px",
+                                  lineHeight: 1.7,
+                                  wordBreak: "break-all",
+                                }}
+                              >
+                                {item.link1}
+                              </a>
+                            ) : null}
+
+                            {item.link2 ? (
+                              <a
+                                href={item.link2}
+                                target="_blank"
+                                rel="noreferrer"
+                                style={{
+                                  ...mutedTextStyle,
+                                  fontSize: "14px",
+                                  lineHeight: 1.7,
+                                  wordBreak: "break-all",
+                                }}
+                              >
+                                {item.link2}
+                              </a>
+                            ) : null}
+                          </div>
+                        )}
                       </article>
                     );
                   })}
