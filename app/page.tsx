@@ -576,7 +576,7 @@ export default function Home() {
     return counts;
   };
 
-  const formatCollectedText = (items: SubmissionItem[]) => {
+  const formatCollectedText = (items: SubmissionItem[], includeSummary: boolean) => {
     const counts = getSubmissionCounts(items);
     const currentStaffCount = items.filter(
       (item) => (item.form_type || item.formType) === "staff"
@@ -602,11 +602,15 @@ export default function Home() {
       return lines.join("\n");
     });
 
+    if (!includeSummary) {
+      return entryLines.join("\n\n");
+    }
+
     return [...summaryLines, "", ...entryLines].join("\n\n");
   };
 
-  const formattedCollectedText = formatCollectedText(visibleSubmissions);
-  const formattedAdminCollectedText = formatCollectedText(sortedSubmissions);
+  const formattedCollectedText = formatCollectedText(visibleSubmissions, false);
+  const formattedAdminCollectedText = formatCollectedText(sortedSubmissions, true);
 
   const handleAdminModeSubmit = () => {
     if (adminPassword !== ADMIN_PASSWORD) {
