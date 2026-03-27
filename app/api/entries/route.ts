@@ -306,7 +306,7 @@ export async function PATCH(request: Request) {
 
     const { data: existingEntry, error: findError } = await supabase
       .from("entries")
-      .select("id, user_id, form_type, link1, link2, completed_at")
+      .select("id, user_id, form_type, link1, link2")
       .eq("id", entryId)
       .eq("session_key", sessionKey)
       .maybeSingle();
@@ -420,13 +420,6 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (existingEntry.completed_at) {
-      return NextResponse.json({
-        ok: true,
-        message: "이미 완료 처리된 링크입니다.",
-      });
-    }
-
     const { error: updateError } = await supabase
       .from("entries")
       .update({
@@ -452,7 +445,7 @@ export async function PATCH(request: Request) {
       {
         ok: false,
         message: missingCompletedColumn
-          ? "완료 기능을 쓰려면 entries 테이블에 completed_at 컬럼을 먼저 추가해야 합니다."
+          ? "완료 저장이 안 되고 있습니다. Supabase entries 테이블에 completed_at 컬럼이 실제로 추가됐는지 다시 확인해 주세요."
           : message,
       },
       { status: 500 }
