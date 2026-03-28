@@ -304,6 +304,26 @@ export default function Home() {
     return "";
   };
 
+  const getStoredQuickLoginProfiles = () => {
+    if (typeof window === "undefined") return savedProfiles;
+
+    const storedProfiles = localStorage.getItem(MEMBER_PROFILES_STORAGE_KEY);
+
+    if (!storedProfiles) return savedProfiles;
+
+    try {
+      const parsedProfiles = JSON.parse(storedProfiles) as SavedProfile[];
+      if (!Array.isArray(parsedProfiles)) return savedProfiles;
+
+      return parsedProfiles.filter(
+        (profile) => profile?.nickname?.trim() && profile?.userId?.trim()
+      );
+    } catch (error) {
+      console.error(error);
+      return savedProfiles;
+    }
+  };
+
   const saveQuickLoginProfile = (profile: SavedProfile, sourceProfiles = savedProfiles) => {
     const normalizedProfile = {
       nickname: profile.nickname.trim(),
@@ -379,7 +399,8 @@ export default function Home() {
     const nextRemember = rememberOverride ?? rememberMe;
     const normalizedNextUserId = normalizeMemberUserId(nextUserId);
     const nextProfileKey = getProfileKey(nextNickname, normalizedNextUserId);
-    const alreadySavedProfile = savedProfiles.some(
+    const storedQuickLoginProfiles = getStoredQuickLoginProfiles();
+    const alreadySavedProfile = storedQuickLoginProfiles.some(
       (profile) => getProfileKey(profile.nickname, profile.userId) === nextProfileKey
     );
 
@@ -428,8 +449,8 @@ export default function Home() {
           userId: normalizedNextUserId,
         };
 
-        if (alreadySavedProfile || savedProfiles.length === 0) {
-          saveQuickLoginProfile(nextProfile);
+        if (alreadySavedProfile || storedQuickLoginProfiles.length === 0) {
+          saveQuickLoginProfile(nextProfile, storedQuickLoginProfiles);
         } else {
           setQuickLoginPrompt(nextProfile);
           localStorage.removeItem(ACTIVE_MEMBER_PROFILE_KEY);
@@ -490,6 +511,24 @@ export default function Home() {
         }
       } catch (error) {
         console.error(error);
+      }
+    }
+
+    if (savedNickname && savedUserId) {
+      const legacyProfile = {
+        nickname: savedNickname.trim(),
+        userId: normalizeMemberUserId(savedUserId),
+      };
+      const hasLegacyProfile = initialProfiles.some(
+        (profile) =>
+          getProfileKey(profile.nickname, profile.userId) ===
+          getProfileKey(legacyProfile.nickname, legacyProfile.userId)
+      );
+
+      if (!hasLegacyProfile) {
+        initialProfiles = [legacyProfile, ...initialProfiles].slice(0, 6);
+        setSavedProfiles(initialProfiles);
+        localStorage.setItem(MEMBER_PROFILES_STORAGE_KEY, JSON.stringify(initialProfiles));
       }
     }
 
