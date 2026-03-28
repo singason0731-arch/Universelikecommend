@@ -49,7 +49,7 @@ export default function AppleIcon() {
             boxShadow: "0 0 0 8px rgba(245, 232, 200, 0.06)",
           }}
         >
-          유
+          ★
         </div>
       </div>
     ),
