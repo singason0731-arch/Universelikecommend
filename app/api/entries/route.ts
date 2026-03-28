@@ -356,7 +356,12 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (action === "update" || action === "uncomplete" || action === "complete_admin") {
+    if (
+      action === "update" ||
+      action === "uncomplete" ||
+      action === "complete_admin" ||
+      action === "delete"
+    ) {
       const adminPassword = String(body.adminPassword || "").trim();
 
       if (adminPassword !== ADMIN_PASSWORD) {
@@ -397,6 +402,21 @@ export async function PATCH(request: Request) {
         return NextResponse.json({
           ok: true,
           message: "운영진이 완료 상태를 체크했습니다.",
+        });
+      }
+
+      if (action === "delete") {
+        const { error: deleteError } = await supabaseServer
+          .from("entries")
+          .delete()
+          .eq("id", entryId)
+          .eq("session_key", sessionKey);
+
+        if (deleteError) throw deleteError;
+
+        return NextResponse.json({
+          ok: true,
+          message: "운영진이 링크를 삭제했습니다.",
         });
       }
 

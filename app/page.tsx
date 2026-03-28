@@ -166,6 +166,7 @@ export default function Home() {
   const [currentSessionKey, setCurrentSessionKey] = useState(getCurrentSessionKey());
   const [alreadyParticipatedToday, setAlreadyParticipatedToday] = useState(false);
   const [completingEntryId, setCompletingEntryId] = useState<string | number | null>(null);
+  const [deletingEntryId, setDeletingEntryId] = useState<string | number | null>(null);
   const [adminPassword, setAdminPassword] = useState("");
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -1178,6 +1179,62 @@ export default function Home() {
     }
   };
 
+  const handleAdminDeleteEntry = async (item: SubmissionItem) => {
+    if (!isAdminMode) {
+      setErrorMessage("운영진 모드에서만 링크를 삭제할 수 있습니다.");
+      return;
+    }
+
+    if (!adminPassword) {
+      setErrorMessage("운영진 비밀번호를 다시 확인해 주세요.");
+      return;
+    }
+
+    if (!window.confirm("이 링크를 삭제할까요?")) {
+      return;
+    }
+
+    try {
+      setDeletingEntryId(item.id);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await fetch("/api/entries", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "delete",
+          entryId: item.id,
+          adminPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setErrorMessage(data.message || "운영진 링크 삭제 중 오류가 발생했습니다.");
+        return;
+      }
+
+      if (editingEntryId === item.id) {
+        resetAdminEditing();
+      }
+
+      setSubmissions((current) =>
+        current.filter((submission) => submission.id !== item.id)
+      );
+      setSuccessMessage(data.message || "운영진이 링크를 삭제했습니다.");
+      await loadEntries(nickname, userId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("운영진 링크 삭제 중 오류가 발생했습니다.");
+    } finally {
+      setDeletingEntryId(null);
+    }
+  };
+
   const handleCopyCollectedText = async () => {
     try {
       await navigator.clipboard.writeText(
@@ -1701,13 +1758,29 @@ export default function Home() {
                                 수정 중
                               </div>
                             ) : (
-                              <button
-                                type="button"
-                                onClick={() => handleStartAdminEdit(item)}
-                                style={copyButtonStyle}
-                              >
-                                운영진 수정
-                              </button>
+                              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartAdminEdit(item)}
+                                  style={copyButtonStyle}
+                                >
+                                  운영진 수정
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleAdminDeleteEntry(item)}
+                                  disabled={deletingEntryId === item.id}
+                                  style={{
+                                    ...copyButtonStyle,
+                                    border: `1px solid ${theme.errorBorder}`,
+                                    color: theme.errorText,
+                                    cursor:
+                                      deletingEntryId === item.id ? "not-allowed" : "pointer",
+                                  }}
+                                >
+                                  {deletingEntryId === item.id ? "삭제 중" : "삭제"}
+                                </button>
+                              </div>
                             )
                           ) : null}
                         </div>
