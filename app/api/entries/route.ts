@@ -338,24 +338,6 @@ export async function PATCH(request: Request) {
 
     const { sessionKey, sessionStart, nextSessionStart } = getSessionWindow();
 
-    const { data: existingEntry, error: findError } = await supabaseServer
-      .from("entries")
-      .select("id, user_id, form_type, link1, link2")
-      .eq("id", entryId)
-      .eq("session_key", sessionKey)
-      .gte("created_at", sessionStart.toISOString())
-      .lt("created_at", nextSessionStart.toISOString())
-      .maybeSingle();
-
-    if (findError) throw findError;
-
-    if (!existingEntry) {
-      return NextResponse.json(
-        { ok: false, message: "해당 링크를 찾을 수 없습니다." },
-        { status: 404 }
-      );
-    }
-
     if (
       action === "update" ||
       action === "uncomplete" ||
@@ -371,14 +353,28 @@ export async function PATCH(request: Request) {
         );
       }
 
+      const { data: existingAdminEntry, error: adminFindError } = await supabaseServer
+        .from("entries")
+        .select("id, user_id, form_type, link1, link2")
+        .eq("id", entryId)
+        .maybeSingle();
+
+      if (adminFindError) throw adminFindError;
+
+      if (!existingAdminEntry) {
+        return NextResponse.json(
+          { ok: false, message: "해당 링크를 찾을 수 없습니다." },
+          { status: 404 }
+        );
+      }
+
       if (action === "uncomplete") {
         const { error: updateError } = await supabaseServer
           .from("entries")
           .update({
             completed_at: null,
           })
-          .eq("id", entryId)
-          .eq("session_key", sessionKey);
+          .eq("id", entryId);
 
         if (updateError) throw updateError;
 
@@ -394,8 +390,7 @@ export async function PATCH(request: Request) {
           .update({
             completed_at: new Date().toISOString(),
           })
-          .eq("id", entryId)
-          .eq("session_key", sessionKey);
+          .eq("id", entryId);
 
         if (updateError) throw updateError;
 
@@ -409,8 +404,7 @@ export async function PATCH(request: Request) {
         const { error: deleteError } = await supabaseServer
           .from("entries")
           .delete()
-          .eq("id", entryId)
-          .eq("session_key", sessionKey);
+          .eq("id", entryId);
 
         if (deleteError) throw deleteError;
 
@@ -422,7 +416,7 @@ export async function PATCH(request: Request) {
 
       const nextLink1 = String(body.link1 || "").trim();
       const nextLink2 = String(body.link2 || "").trim();
-      const formType = String(existingEntry.form_type || "").trim();
+      const formType = String(existingAdminEntry.form_type || "").trim();
 
       const requiresLink1 =
         formType === "feed" ||
@@ -466,8 +460,7 @@ export async function PATCH(request: Request) {
           link1: nextLink1 || null,
           link2: nextLink2 || null,
         })
-        .eq("id", entryId)
-        .eq("session_key", sessionKey);
+        .eq("id", entryId);
 
       if (updateError) throw updateError;
 
@@ -475,6 +468,24 @@ export async function PATCH(request: Request) {
         ok: true,
         message: "운영진 링크 수정이 완료되었습니다.",
       });
+    }
+
+    const { data: existingEntry, error: findError } = await supabaseServer
+      .from("entries")
+      .select("id, user_id, form_type, link1, link2")
+      .eq("id", entryId)
+      .eq("session_key", sessionKey)
+      .gte("created_at", sessionStart.toISOString())
+      .lt("created_at", nextSessionStart.toISOString())
+      .maybeSingle();
+
+    if (findError) throw findError;
+
+    if (!existingEntry) {
+      return NextResponse.json(
+        { ok: false, message: "해당 링크를 찾을 수 없습니다." },
+        { status: 404 }
+      );
     }
 
     if (!isCompletionWindowOpen()) {
