@@ -77,6 +77,7 @@ type QuickLoginPromptState = {
 const SKIP_LIMIT = 7;
 const OPEN_TIME = "14:30";
 const CLOSE_TIME = "22:00";
+const ITEM_CLOSE_TIME = "21:00";
 const ADMIN_PASSWORD = "0000";
 const THEME_STORAGE_KEY = "preferredTheme";
 const MEMBER_PROFILES_STORAGE_KEY = "memberProfiles";
@@ -187,7 +188,9 @@ export default function Home() {
 
   const openMinutes = parseTimeToMinutes(OPEN_TIME);
   const closeMinutes = parseTimeToMinutes(CLOSE_TIME);
+  const itemCloseMinutes = parseTimeToMinutes(ITEM_CLOSE_TIME);
   const isFormOpen = nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
+  const isItemSelectionOpen = nowMinutes < itemCloseMinutes;
   const isCompletionWindowOpen =
     nowMinutes >= closeMinutes || nowMinutes < openMinutes;
   const isPublicCollectedWindowOpen = isCompletionWindowOpen;
@@ -720,6 +723,11 @@ export default function Home() {
 
     if (formType === "twofeed" && !itemStatus.canUseTwofeed) {
       setErrorMessage("보유하고 있는 투피드권이 없습니다.");
+      return;
+    }
+
+    if ((formType === "skip" || formType === "twofeed") && !isItemSelectionOpen) {
+      setErrorMessage("스킵과 투피드는 오후 9시 전까지만 선택할 수 있습니다.");
       return;
     }
 
@@ -2153,17 +2161,32 @@ export default function Home() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => !isSkipClosed && itemStatus.canUseSkip && handleTabChange("skip")}
-                    style={toggleButtonStyle(formType === "skip", isSkipClosed || !itemStatus.canUseSkip)}
-                    disabled={isSkipClosed || !itemStatus.canUseSkip}
+                    onClick={() =>
+                      !isSkipClosed &&
+                      itemStatus.canUseSkip &&
+                      isItemSelectionOpen &&
+                      handleTabChange("skip")
+                    }
+                    style={toggleButtonStyle(
+                      formType === "skip",
+                      isSkipClosed || !itemStatus.canUseSkip || !isItemSelectionOpen
+                    )}
+                    disabled={isSkipClosed || !itemStatus.canUseSkip || !isItemSelectionOpen}
                   >
                     스킵
                   </button>
                   <button
                     type="button"
-                    onClick={() => itemStatus.canUseTwofeed && handleTabChange("twofeed")}
-                    style={toggleButtonStyle(formType === "twofeed", !itemStatus.canUseTwofeed)}
-                    disabled={!itemStatus.canUseTwofeed}
+                    onClick={() =>
+                      itemStatus.canUseTwofeed &&
+                      isItemSelectionOpen &&
+                      handleTabChange("twofeed")
+                    }
+                    style={toggleButtonStyle(
+                      formType === "twofeed",
+                      !itemStatus.canUseTwofeed || !isItemSelectionOpen
+                    )}
+                    disabled={!itemStatus.canUseTwofeed || !isItemSelectionOpen}
                   >
                     투피드
                   </button>
