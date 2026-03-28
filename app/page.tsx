@@ -64,10 +64,18 @@ type ItemStatus = {
   twofeedOwnedCount: number;
 };
 
+type SavedProfile = {
+  nickname: string;
+  userId: string;
+};
+
 const SKIP_LIMIT = 7;
 const OPEN_TIME = "14:30";
 const CLOSE_TIME = "22:00";
 const ADMIN_PASSWORD = "0000";
+const THEME_STORAGE_KEY = "preferredTheme";
+const MEMBER_PROFILES_STORAGE_KEY = "memberProfiles";
+const ACTIVE_MEMBER_PROFILE_KEY = "activeMemberProfile";
 
 function parseTimeToMinutes(time: string) {
   const [hour, minute] = time.split(":").map(Number);
@@ -91,7 +99,12 @@ function normalizeMemberUserId(value: string) {
   return trimmed.startsWith("@") ? trimmed : `@${trimmed}`;
 }
 
+function getProfileKey(nickname: string, userId: string) {
+  return `${nickname.trim()}::${normalizeMemberUserId(userId)}`;
+}
+
 export default function Home() {
+  const [themeMode, setThemeMode] = useState<"light" | "dark">("light");
   const [formType, setFormType] = useState<FormType>("feed");
   const [nickname, setNickname] = useState("");
   const [userId, setUserId] = useState("");
@@ -125,6 +138,7 @@ export default function Home() {
   const [editingLink1, setEditingLink1] = useState("");
   const [editingLink2, setEditingLink2] = useState("");
   const [isSavingAdminEdit, setIsSavingAdminEdit] = useState(false);
+  const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
   const [itemStatus, setItemStatus] = useState<ItemStatus>({
     canUseSkip: false,
     canUseTwofeed: false,
@@ -150,6 +164,40 @@ export default function Home() {
   const normalizedCurrentUserId = normalizeMemberUserId(userId);
   const completionWindowMessage =
     "오후 10시부터 다음날 오후 2시 30분 전까지 가능";
+  const isDarkMode = themeMode === "dark";
+
+  const theme = {
+    pageBackground: isDarkMode
+      ? "linear-gradient(180deg, #14181d 0%, #11151a 45%, #0c1014 100%)"
+      : "linear-gradient(180deg, #fffdf9 0%, #fffaf3 40%, #ffffff 100%)",
+    cardBackground: isDarkMode ? "#171d24" : "#ffffff",
+    cardBorder: isDarkMode ? "#27303a" : "#f1ede7",
+    cardShadow: isDarkMode ? "0 10px 24px rgba(0,0,0,0.28)" : "0 6px 18px rgba(0,0,0,0.03)",
+    text: isDarkMode ? "#f4efe8" : "#1f1f1f",
+    mutedText: isDarkMode ? "#b7ada0" : "#6d665d",
+    subText: isDarkMode ? "#8f9aa7" : "#7b6f60",
+    inputBackground: isDarkMode ? "#10151b" : "#fffdfb",
+    inputBorder: isDarkMode ? "#33404d" : "#e5ddd2",
+    chipBackground: isDarkMode ? "#1d252d" : "#f7f2ea",
+    chipBorder: isDarkMode ? "#344150" : "#eee4d3",
+    primary: isDarkMode ? "#f3ede3" : "#1f1f1f",
+    primaryText: isDarkMode ? "#13171c" : "#ffffff",
+    secondaryBackground: isDarkMode ? "#171d24" : "#ffffff",
+    secondaryBorder: isDarkMode ? "#33404d" : "#e7dfd3",
+    secondaryText: isDarkMode ? "#ece5d8" : "#2a2a2a",
+    panelBackground: isDarkMode ? "#121820" : "#faf7f3",
+    panelBorder: isDarkMode ? "#2b3642" : "#e7ddd0",
+    dashedBorder: isDarkMode ? "#394654" : "#e7ddd0",
+    successBg: isDarkMode ? "#163022" : "#f4fbf5",
+    successBorder: isDarkMode ? "#2d5b42" : "#d7edd9",
+    successText: isDarkMode ? "#c6f1d2" : "#2b4d30",
+    errorBg: isDarkMode ? "#34191b" : "#fff4f4",
+    errorBorder: isDarkMode ? "#6a3034" : "#f2d1d1",
+    errorText: isDarkMode ? "#ffcdcd" : "#6e2f2f",
+    articleBackground: isDarkMode ? "#131921" : "#fffdfa",
+    articleBorder: isDarkMode ? "#2c3743" : "#eee7dd",
+    dimmedText: isDarkMode ? "#7f8a96" : "#9b978f",
+  };
 
   const todayText = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -339,6 +387,25 @@ export default function Home() {
         localStorage.setItem("memberNickname", nextNickname);
         localStorage.setItem("memberUserId", nextUserId);
         localStorage.setItem("rememberMember", "true");
+
+        const nextProfile = {
+          nickname: nextNickname,
+          userId: normalizeMemberUserId(nextUserId),
+        };
+        const nextProfiles = [
+          nextProfile,
+          ...savedProfiles.filter(
+            (profile) => getProfileKey(profile.nickname, profile.userId) !==
+              getProfileKey(nextProfile.nickname, nextProfile.userId)
+          ),
+        ].slice(0, 6);
+
+        setSavedProfiles(nextProfiles);
+        localStorage.setItem(MEMBER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
+        localStorage.setItem(
+          ACTIVE_MEMBER_PROFILE_KEY,
+          getProfileKey(nextProfile.nickname, nextProfile.userId)
+        );
       } else {
         localStorage.removeItem("memberNickname");
         localStorage.removeItem("memberUserId");
@@ -367,10 +434,31 @@ export default function Home() {
   };
 
   useEffect(() => {
+    const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
     const savedNickname = localStorage.getItem("memberNickname");
     const savedUserId = localStorage.getItem("memberUserId");
     const savedRemember = localStorage.getItem("rememberMember");
     const savedAdminMode = localStorage.getItem("adminMode");
+    const storedProfiles = localStorage.getItem(MEMBER_PROFILES_STORAGE_KEY);
+
+    if (savedTheme === "dark" || savedTheme === "light") {
+      setThemeMode(savedTheme);
+    }
+
+    if (storedProfiles) {
+      try {
+        const parsedProfiles = JSON.parse(storedProfiles) as SavedProfile[];
+        if (Array.isArray(parsedProfiles)) {
+          setSavedProfiles(
+            parsedProfiles.filter(
+              (profile) => profile?.nickname?.trim() && profile?.userId?.trim()
+            )
+          );
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
 
     if (savedRemember === "true" && savedNickname && savedUserId) {
       setNickname(savedNickname);
@@ -393,12 +481,48 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+  }, [themeMode]);
+
+  useEffect(() => {
     const timer = setInterval(() => {
       setNowMinutes(getSeoulNowMinutes());
     }, 30000);
 
     return () => clearInterval(timer);
   }, []);
+
+  const handleSelectSavedProfile = (profile: SavedProfile) => {
+    setNickname(profile.nickname);
+    setUserId(profile.userId);
+    setRememberMe(true);
+    localStorage.setItem("memberNickname", profile.nickname);
+    localStorage.setItem("memberUserId", profile.userId);
+    localStorage.setItem("rememberMember", "true");
+    localStorage.setItem(
+      ACTIVE_MEMBER_PROFILE_KEY,
+      getProfileKey(profile.nickname, profile.userId)
+    );
+    void handleVerifyMember(profile.nickname, profile.userId, true);
+  };
+
+  const handleRemoveSavedProfile = (profile: SavedProfile) => {
+    const nextProfiles = savedProfiles.filter(
+      (savedProfile) =>
+        getProfileKey(savedProfile.nickname, savedProfile.userId) !==
+        getProfileKey(profile.nickname, profile.userId)
+    );
+
+    setSavedProfiles(nextProfiles);
+    localStorage.setItem(MEMBER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
+
+    if (
+      localStorage.getItem(ACTIVE_MEMBER_PROFILE_KEY) ===
+      getProfileKey(profile.nickname, profile.userId)
+    ) {
+      localStorage.removeItem(ACTIVE_MEMBER_PROFILE_KEY);
+    }
+  };
 
   const handleSubmit = async () => {
     setErrorMessage("");
@@ -900,11 +1024,11 @@ export default function Home() {
 
   const pageStyle: React.CSSProperties = {
     minHeight: "100vh",
-    background: "linear-gradient(180deg, #fffdf9 0%, #fffaf3 40%, #ffffff 100%)",
+    background: theme.pageBackground,
     padding: "18px 12px 40px",
     fontFamily:
       'Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-    color: "#1f1f1f",
+    color: theme.text,
   };
 
   const containerStyle: React.CSSProperties = {
@@ -913,11 +1037,11 @@ export default function Home() {
   };
 
   const cardStyle: React.CSSProperties = {
-    background: "#ffffff",
-    border: "1px solid #f1ede7",
+    background: theme.cardBackground,
+    border: `1px solid ${theme.cardBorder}`,
     borderRadius: "22px",
     padding: "18px 16px",
-    boxShadow: "0 6px 18px rgba(0,0,0,0.03)",
+    boxShadow: theme.cardShadow,
     marginBottom: "14px",
   };
 
@@ -925,10 +1049,11 @@ export default function Home() {
     width: "100%",
     padding: "14px 14px",
     borderRadius: "14px",
-    border: "1px solid #e5ddd2",
+    border: `1px solid ${theme.inputBorder}`,
     outline: "none",
     fontSize: "15px",
-    background: "#fffdfb",
+    background: theme.inputBackground,
+    color: theme.text,
     boxSizing: "border-box",
     minHeight: "48px",
   };
@@ -938,7 +1063,7 @@ export default function Home() {
     fontSize: "13px",
     fontWeight: 700,
     marginBottom: "8px",
-    color: "#403c37",
+    color: theme.text,
   };
 
   const toggleWrapStyle: React.CSSProperties = {
@@ -951,8 +1076,8 @@ export default function Home() {
     padding: "12px 14px",
     borderRadius: "14px",
     border: active ? "1px solid #1f1f1f" : "1px solid #e7dfd3",
-    background: disabled ? "#f5f5f5" : active ? "#1f1f1f" : "#ffffff",
-    color: disabled ? "#9a9a9a" : active ? "#ffffff" : "#333333",
+    background: disabled ? theme.panelBackground : active ? theme.primary : theme.secondaryBackground,
+    color: disabled ? theme.dimmedText : active ? theme.primaryText : theme.secondaryText,
     cursor: disabled ? "not-allowed" : "pointer",
     fontSize: "13px",
     fontWeight: 700,
@@ -964,8 +1089,8 @@ export default function Home() {
     border: "none",
     borderRadius: "18px",
     padding: "16px 18px",
-    background: "#1f1f1f",
-    color: "#ffffff",
+    background: theme.primary,
+    color: theme.primaryText,
     fontSize: "16px",
     fontWeight: 800,
     cursor: "pointer",
@@ -974,11 +1099,11 @@ export default function Home() {
 
   const secondaryButtonStyle: React.CSSProperties = {
     width: "100%",
-    border: "1px solid #e7dfd3",
+    border: `1px solid ${theme.secondaryBorder}`,
     borderRadius: "18px",
     padding: "15px 18px",
-    background: "#ffffff",
-    color: "#2a2a2a",
+    background: theme.secondaryBackground,
+    color: theme.secondaryText,
     fontSize: "15px",
     fontWeight: 800,
     cursor: "pointer",
@@ -987,11 +1112,11 @@ export default function Home() {
   };
 
   const copyButtonStyle: React.CSSProperties = {
-    border: "1px solid #e7dfd3",
+    border: `1px solid ${theme.secondaryBorder}`,
     borderRadius: "12px",
     padding: "10px 12px",
-    background: "#ffffff",
-    color: "#2a2a2a",
+    background: theme.secondaryBackground,
+    color: theme.secondaryText,
     fontSize: "13px",
     fontWeight: 800,
     cursor: "pointer",
@@ -1511,16 +1636,35 @@ export default function Home() {
         <section style={cardStyle}>
           <div
             style={{
-              display: "inline-block",
-              padding: "6px 11px",
-              borderRadius: "999px",
-              background: "#f7f2ea",
-              fontSize: "11px",
-              fontWeight: 800,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "10px",
+              flexWrap: "wrap",
               marginBottom: "12px",
             }}
           >
-            접수 페이지
+            <div
+              style={{
+                display: "inline-block",
+                padding: "6px 11px",
+                borderRadius: "999px",
+                background: theme.chipBackground,
+                fontSize: "11px",
+                fontWeight: 800,
+                color: theme.secondaryText,
+              }}
+            >
+              접수 페이지
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setThemeMode((prev) => (prev === "light" ? "dark" : "light"))}
+              style={copyButtonStyle}
+            >
+              {isDarkMode ? "라이트모드" : "다크모드"}
+            </button>
           </div>
 
           <h1 style={{ fontSize: "28px", margin: "0 0 8px 0", lineHeight: 1.25 }}>
@@ -1573,6 +1717,66 @@ export default function Home() {
           <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "12px" }}>
             멤버 인증
           </div>
+
+          {savedProfiles.length > 0 ? (
+            <div style={{ marginBottom: "14px" }}>
+              <div style={{ ...labelStyle, marginBottom: "10px" }}>저장된 로그인</div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                {savedProfiles.map((profile) => {
+                  const isActiveProfile =
+                    getProfileKey(profile.nickname, profile.userId) ===
+                    getProfileKey(nickname, userId);
+
+                  return (
+                    <div
+                      key={getProfileKey(profile.nickname, profile.userId)}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        padding: "7px 10px",
+                        borderRadius: "999px",
+                        background: isActiveProfile ? theme.primary : theme.chipBackground,
+                        color: isActiveProfile ? theme.primaryText : theme.secondaryText,
+                        border: `1px solid ${isActiveProfile ? theme.primary : theme.chipBorder}`,
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleSelectSavedProfile(profile)}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "inherit",
+                          fontSize: "12px",
+                          fontWeight: 800,
+                          cursor: "pointer",
+                          padding: 0,
+                        }}
+                      >
+                        {profile.nickname} {profile.userId}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSavedProfile(profile)}
+                        style={{
+                          border: "none",
+                          background: "transparent",
+                          color: "inherit",
+                          fontSize: "11px",
+                          cursor: "pointer",
+                          padding: 0,
+                          opacity: 0.8,
+                        }}
+                      >
+                        x
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : null}
 
           <div style={{ marginBottom: "12px" }}>
             <label style={labelStyle}>닉네임</label>
