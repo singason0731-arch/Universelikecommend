@@ -190,7 +190,8 @@ export default function Home() {
   const isFormOpen = nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
   const isCompletionWindowOpen =
     nowMinutes >= closeMinutes || nowMinutes < openMinutes;
-  const isPublicCollectedWindowOpen = nowMinutes >= closeMinutes;
+  const isPublicCollectedWindowOpen =
+    nowMinutes >= closeMinutes || nowMinutes < openMinutes;
   const isMemberCollectedWindowOpen =
     nowMinutes >= openMinutes && nowMinutes < closeMinutes;
   const canViewCollected =
