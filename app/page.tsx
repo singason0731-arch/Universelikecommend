@@ -138,7 +138,8 @@ export default function Home() {
   const openMinutes = parseTimeToMinutes(OPEN_TIME);
   const closeMinutes = parseTimeToMinutes(CLOSE_TIME);
   const isFormOpen = nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
-  const isCompletionWindowOpen = nowMinutes >= closeMinutes;
+  const isCompletionWindowOpen =
+    nowMinutes >= closeMinutes || nowMinutes < openMinutes;
   const isPublicCollectedWindowOpen = nowMinutes >= closeMinutes;
   const isMemberCollectedWindowOpen =
     nowMinutes >= openMinutes && nowMinutes < closeMinutes;
@@ -720,7 +721,7 @@ export default function Home() {
     }
 
     if (!isCompletionWindowOpen) {
-      setErrorMessage("완료 처리는 오후 10시부터 가능합니다.");
+      setErrorMessage("완료 처리는 오후 10시부터 다음날 오후 2시 30분 전까지 가능합니다.");
       return;
     }
 
@@ -1095,7 +1096,7 @@ export default function Home() {
               }}
             >
               <div style={{ fontSize: "13px", color: "#6d665d", lineHeight: 1.6, fontWeight: 600 }}>
-                운영진 모드가 활성화되어 링크 수정이 가능합니다.
+                운영진 모드가 활성화되어 링크 수정과 완 선택/해제가 가능합니다.
               </div>
 
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -1236,9 +1237,9 @@ export default function Home() {
                     const isCompleted = isSubmissionCompleted(item);
                     const isOwnItem = isOwnSubmission(item);
                     const hasLinks = hasSubmissionLinks(item);
-                    const canCompleteThisItem =
-                      isOwnItem && hasLinks && isCompletionWindowOpen && !isCompleted;
-                    const canAdminToggleThisItem = isAdminMode && hasLinks;
+    const canCompleteThisItem =
+      isOwnItem && hasLinks && isCompletionWindowOpen && !isCompleted;
+    const canAdminToggleThisItem = isAdminMode && hasLinks && isCompletionWindowOpen;
                     const mutedTextStyle: React.CSSProperties = isCompleted
                       ? {
                           color: "#9b978f",
@@ -1326,7 +1327,7 @@ export default function Home() {
                               </button>
                             ) : (
                               <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
-                                오후 10시부터 가능
+                                오후 10시부터 다음날 2시 30분 전까지 가능
                               </div>
                             )
                           ) : null}

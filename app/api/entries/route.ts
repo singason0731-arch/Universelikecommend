@@ -114,7 +114,7 @@ function isFormOpen() {
 
 function isCompletionWindowOpen() {
   const { currentMinutes } = getSeoulDateTime();
-  return currentMinutes >= CLOSE_MINUTES;
+  return currentMinutes >= CLOSE_MINUTES || currentMinutes < OPEN_MINUTES;
 }
 
 function isValidUrl(value: string) {
@@ -424,7 +424,7 @@ export async function PATCH(request: Request) {
       return NextResponse.json(
         {
           ok: false,
-          message: "완료 처리는 오후 10시부터 가능합니다.",
+          message: "완료 처리는 오후 10시부터 다음날 오후 2시 30분 전까지 가능합니다.",
         },
         { status: 400 }
       );
