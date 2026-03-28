@@ -193,6 +193,8 @@ export default function Home() {
   const isPublicCollectedWindowOpen = isCompletionWindowOpen;
   const isMemberCollectedWindowOpen =
     nowMinutes >= openMinutes && nowMinutes < closeMinutes;
+  const isOvernightPublicWindow =
+    isPublicCollectedWindowOpen && !isAdminMode;
   const canViewCollected =
     isAdminMode ||
     isPublicCollectedWindowOpen ||
@@ -2077,26 +2079,28 @@ export default function Home() {
           ) : null}
         </section>
 
-        <section
-          style={{
-            ...cardStyle,
-            background: isVerified ? theme.chipBackground : theme.panelBackground,
-            border: `1px solid ${isVerified ? theme.chipBorder : theme.panelBorder}`,
-          }}
-        >
-          <div>
-            <div style={{ fontSize: "12px", color: theme.subText, marginBottom: "4px", fontWeight: 700 }}>
-              스킵 현황
+        {!isOvernightPublicWindow && (
+          <section
+            style={{
+              ...cardStyle,
+              background: isVerified ? theme.chipBackground : theme.panelBackground,
+              border: `1px solid ${isVerified ? theme.chipBorder : theme.panelBorder}`,
+            }}
+          >
+            <div>
+              <div style={{ fontSize: "12px", color: theme.subText, marginBottom: "4px", fontWeight: 700 }}>
+                스킵 현황
+              </div>
+              <div style={{ fontSize: "17px", fontWeight: 900, lineHeight: 1.45 }}>
+                {isSkipClosed
+                  ? "스킵 신청이 마감되었습니다."
+                  : `스킵 사용 가능 인원 : ${skipRemainingCount}명`}
+              </div>
             </div>
-            <div style={{ fontSize: "17px", fontWeight: 900, lineHeight: 1.45 }}>
-              {isSkipClosed
-                ? "스킵 신청이 마감되었습니다."
-                : `스킵 사용 가능 인원 : ${skipRemainingCount}명`}
-            </div>
-          </div>
-        </section>
+          </section>
+        )}
 
-        {successMessage && (
+        {!isOvernightPublicWindow && successMessage && (
           <section style={messageBox(theme.successBg, theme.successBorder)}>
             <div style={{ fontSize: "13px", fontWeight: 800, marginBottom: "6px", color: theme.successText }}>
               제출 완료
@@ -2121,13 +2125,15 @@ export default function Home() {
         {isVerified ? (
           alreadyParticipatedToday ? (
             <>
-              <section style={cardStyle}>
-                <div style={{ fontSize: "14px", lineHeight: 1.7, color: theme.mutedText, fontWeight: 600 }}>
-                  오늘은 이미 참여완료 했어요.
-                  <br />
-                  취합된 링크만 확인할 수 있습니다.
-                </div>
-              </section>
+              {!isOvernightPublicWindow && (
+                <section style={cardStyle}>
+                  <div style={{ fontSize: "14px", lineHeight: 1.7, color: theme.mutedText, fontWeight: 600 }}>
+                    오늘은 이미 참여완료 했어요.
+                    <br />
+                    취합된 링크만 확인할 수 있습니다.
+                  </div>
+                </section>
+              )}
 
               {renderCollectedSection()}
             </>
