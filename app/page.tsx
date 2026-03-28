@@ -521,7 +521,6 @@ export default function Home() {
     const savedNickname = localStorage.getItem("memberNickname");
     const savedUserId = localStorage.getItem("memberUserId");
     const savedRemember = localStorage.getItem("rememberMember");
-    const savedAdminMode = localStorage.getItem("adminMode");
     const storedProfiles = localStorage.getItem(MEMBER_PROFILES_STORAGE_KEY);
     const activeProfileKey = localStorage.getItem(ACTIVE_MEMBER_PROFILE_KEY);
     let initialProfiles: SavedProfile[] = [];
@@ -590,11 +589,7 @@ export default function Home() {
       loadEntries();
     }
 
-    if (savedAdminMode === "true") {
-      setIsAdminMode(true);
-      setAdminPassword(ADMIN_PASSWORD);
-      setShowAdminPanel(true);
-    }
+    localStorage.removeItem("adminMode");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -916,14 +911,12 @@ export default function Home() {
     setSuccessMessage("운영진 모드가 활성화되었습니다.");
     setIsAdminMode(true);
     setShowAdminPanel(true);
-    localStorage.setItem("adminMode", "true");
   };
 
   const handleAdminModeExit = () => {
     setIsAdminMode(false);
     setAdminPassword("");
     resetAdminEditing();
-    localStorage.removeItem("adminMode");
   };
 
   const handleStartAdminEdit = (item: SubmissionItem) => {

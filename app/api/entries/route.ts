@@ -72,23 +72,56 @@ function getSeoulDateTime() {
   return { now, seoulDate, dateText, currentMinutes };
 }
 
-function getSessionKey() {
-  const { now, dateText, currentMinutes } = getSeoulDateTime();
-  const resetMinutes = OPEN_MINUTES;
-
-  if (currentMinutes >= resetMinutes) {
-    return dateText;
-  }
-
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  return new Intl.DateTimeFormat("en-CA", {
+function getSeoulDateParts(baseDate = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Seoul",
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
-  }).format(yesterday);
+  }).formatToParts(baseDate);
+
+  const year = Number(parts.find((part) => part.type === "year")?.value || "0");
+  const month = Number(parts.find((part) => part.type === "month")?.value || "0");
+  const day = Number(parts.find((part) => part.type === "day")?.value || "0");
+
+  return { year, month, day };
+}
+
+function createSeoulDate(year: number, month: number, day: number, hour = 0, minute = 0) {
+  return new Date(Date.UTC(year, month - 1, day, hour - 9, minute));
+}
+
+function getSessionWindow() {
+  const { currentMinutes } = getSeoulDateTime();
+  const baseParts = getSeoulDateParts();
+  const sessionStart = createSeoulDate(
+    baseParts.year,
+    baseParts.month,
+    baseParts.day,
+    14,
+    30
+  );
+
+  if (currentMinutes >= OPEN_MINUTES) {
+    const nextSessionStart = new Date(sessionStart);
+    nextSessionStart.setUTCDate(nextSessionStart.getUTCDate() + 1);
+
+    return {
+      sessionKey: `${baseParts.year}-${String(baseParts.month).padStart(2, "0")}-${String(baseParts.day).padStart(2, "0")}`,
+      sessionStart,
+      nextSessionStart,
+    };
+  }
+
+  const previousSessionStart = new Date(sessionStart);
+  previousSessionStart.setUTCDate(previousSessionStart.getUTCDate() - 1);
+  const previousParts = getSeoulDateParts(previousSessionStart);
+
+  return {
+    sessionKey: `${previousParts.year}-${String(previousParts.month).padStart(2, "0")}-${String(previousParts.day).padStart(2, "0")}`,
+    sessionStart: previousSessionStart,
+    nextSessionStart: sessionStart,
+  };
 }
 
 function getWeekKey() {
@@ -240,7 +273,7 @@ async function getTwofeedPermission(nickname: string, userId: string) {
 
 export async function GET(request: Request) {
   try {
-    const sessionKey = getSessionKey();
+    const { sessionKey, sessionStart, nextSessionStart } = getSessionWindow();
     const { searchParams } = new URL(request.url);
 
     const nickname = String(searchParams.get("nickname") || "").trim();
@@ -250,6 +283,8 @@ export async function GET(request: Request) {
       .from("entries")
       .select("*")
       .eq("session_key", sessionKey)
+      .gte("created_at", sessionStart.toISOString())
+      .lt("created_at", nextSessionStart.toISOString())
       .order("created_at", { ascending: true });
 
     if (error) throw error;
@@ -301,13 +336,15 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const sessionKey = getSessionKey();
+    const { sessionKey, sessionStart, nextSessionStart } = getSessionWindow();
 
     const { data: existingEntry, error: findError } = await supabaseServer
       .from("entries")
       .select("id, user_id, form_type, link1, link2")
       .eq("id", entryId)
       .eq("session_key", sessionKey)
+      .gte("created_at", sessionStart.toISOString())
+      .lt("created_at", nextSessionStart.toISOString())
       .maybeSingle();
 
     if (findError) throw findError;
@@ -524,17 +561,22 @@ export async function POST(request: Request) {
       );
     }
 
-    const sessionKey = getSessionKey();
+    const { sessionKey, sessionStart, nextSessionStart } = getSessionWindow();
 
     const { data: existingEntries, error: countError } = await supabaseServer
       .from("entries")
-      .select("id, form_type, user_id")
+      .select("id, form_type, user_id, created_at")
       .eq("session_key", sessionKey);
+
+    const filteredExistingEntries = (existingEntries ?? []).filter((item) => {
+      const createdAt = new Date(String((item as { created_at?: string }).created_at || ""));
+      return createdAt >= sessionStart && createdAt < nextSessionStart;
+    });
 
     if (countError) throw countError;
 
     const alreadyParticipated =
-      existingEntries?.some((item) => String(item.user_id || "").trim() === userId) ?? false;
+      filteredExistingEntries.some((item) => String(item.user_id || "").trim() === userId);
 
     if (alreadyParticipated) {
       return NextResponse.json(
@@ -548,7 +590,7 @@ export async function POST(request: Request) {
     }
 
     const currentSkipCount =
-      existingEntries?.filter((item) => item.form_type === "skip").length ?? 0;
+      filteredExistingEntries.filter((item) => item.form_type === "skip").length ?? 0;
 
     const entryPayload = buildEntryPayload({
       sessionKey,
