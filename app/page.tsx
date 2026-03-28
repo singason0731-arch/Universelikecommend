@@ -190,8 +190,7 @@ export default function Home() {
   const isFormOpen = nowMinutes >= openMinutes && nowMinutes <= closeMinutes;
   const isCompletionWindowOpen =
     nowMinutes >= closeMinutes || nowMinutes < openMinutes;
-  const isPublicCollectedWindowOpen =
-    nowMinutes >= closeMinutes || nowMinutes < openMinutes;
+  const isPublicCollectedWindowOpen = isCompletionWindowOpen;
   const isMemberCollectedWindowOpen =
     nowMinutes >= openMinutes && nowMinutes < closeMinutes;
   const canViewCollected =
@@ -1312,7 +1311,7 @@ export default function Home() {
     }
 
     if (isPublicCollectedWindowOpen) {
-      return "오후 10시 이후에는 로그인 없이도 취합된 링크를 확인할 수 있습니다.";
+      return "오후 10시부터 다음날 오후 2시 30분 전까지는 로그인 없이도 취합된 링크를 확인할 수 있습니다.";
     }
 
     if (nowMinutes < openMinutes) {
