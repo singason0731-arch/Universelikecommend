@@ -319,7 +319,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    if (action === "update" || action === "uncomplete") {
+    if (action === "update" || action === "uncomplete" || action === "complete_admin") {
       const adminPassword = String(body.adminPassword || "").trim();
 
       if (adminPassword !== ADMIN_PASSWORD) {
@@ -343,6 +343,23 @@ export async function PATCH(request: Request) {
         return NextResponse.json({
           ok: true,
           message: "운영진이 완료 상태를 해제했습니다.",
+        });
+      }
+
+      if (action === "complete_admin") {
+        const { error: updateError } = await supabaseServer
+          .from("entries")
+          .update({
+            completed_at: new Date().toISOString(),
+          })
+          .eq("id", entryId)
+          .eq("session_key", sessionKey);
+
+        if (updateError) throw updateError;
+
+        return NextResponse.json({
+          ok: true,
+          message: "운영진이 완료 상태를 체크했습니다.",
         });
       }
 

@@ -825,6 +825,62 @@ export default function Home() {
     }
   };
 
+  const handleAdminComplete = async (entryId: string | number) => {
+    if (!isAdminMode) {
+      setErrorMessage("운영진 모드에서만 완료 체크가 가능합니다.");
+      return;
+    }
+
+    if (!adminPassword) {
+      setErrorMessage("운영진 비밀번호를 다시 확인해 주세요.");
+      return;
+    }
+
+    try {
+      setCompletingEntryId(entryId);
+      setErrorMessage("");
+      setSuccessMessage("");
+
+      const response = await fetch("/api/entries", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          action: "complete_admin",
+          entryId,
+          adminPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.ok) {
+        setErrorMessage(data.message || "완료 체크 중 오류가 발생했습니다.");
+        return;
+      }
+
+      setSubmissions((current) =>
+        current.map((submission) =>
+          submission.id === entryId
+            ? {
+                ...submission,
+                completed_at: new Date().toISOString(),
+              }
+            : submission
+        )
+      );
+
+      setSuccessMessage(data.message || "운영진이 완료 상태를 체크했습니다.");
+      await loadEntries(nickname, userId);
+    } catch (error) {
+      console.error(error);
+      setErrorMessage("완료 체크 중 오류가 발생했습니다.");
+    } finally {
+      setCompletingEntryId(null);
+    }
+  };
+
   const handleCopyCollectedText = async () => {
     try {
       await navigator.clipboard.writeText(
@@ -1179,8 +1235,10 @@ export default function Home() {
                     const reelsLabel = getSubmissionReelsLabel(item);
                     const isCompleted = isSubmissionCompleted(item);
                     const isOwnItem = isOwnSubmission(item);
+                    const hasLinks = hasSubmissionLinks(item);
                     const canCompleteThisItem =
-                      isOwnItem && hasSubmissionLinks(item) && isCompletionWindowOpen && !isCompleted;
+                      isOwnItem && hasLinks && isCompletionWindowOpen && !isCompleted;
+                    const canAdminToggleThisItem = isAdminMode && hasLinks;
                     const mutedTextStyle: React.CSSProperties = isCompleted
                       ? {
                           color: "#9b978f",
@@ -1220,7 +1278,7 @@ export default function Home() {
                             </span>
                           </div>
 
-                          {isOwnItem && hasSubmissionLinks(item) ? (
+                          {!isAdminMode && isOwnItem && hasLinks ? (
                             isCompleted ? null : canCompleteThisItem ? (
                               <button
                                 type="button"
@@ -1273,10 +1331,14 @@ export default function Home() {
                             )
                           ) : null}
 
-                          {isAdminMode && isCompleted && hasSubmissionLinks(item) ? (
+                          {canAdminToggleThisItem ? (
                             <button
                               type="button"
-                              onClick={() => handleAdminUndoComplete(item.id)}
+                              onClick={() =>
+                                isCompleted
+                                  ? handleAdminUndoComplete(item.id)
+                                  : handleAdminComplete(item.id)
+                              }
                               disabled={completingEntryId === item.id}
                               style={{
                                 display: "inline-flex",
@@ -1308,7 +1370,11 @@ export default function Home() {
                                   justifyContent: "center",
                                   fontSize: "11px",
                                   background:
-                                    completingEntryId === item.id ? "#f3efe8" : "#fffdfa",
+                                    completingEntryId === item.id
+                                      ? "#f3efe8"
+                                      : isCompleted
+                                      ? "#f3efe8"
+                                      : "#fffdfa",
                                   color:
                                     completingEntryId === item.id ? "#b0a89d" : "#6d665d",
                                   flexShrink: 0,
@@ -1316,7 +1382,13 @@ export default function Home() {
                               >
                                 {completingEntryId === item.id ? "..." : "완"}
                               </span>
-                              <span>{completingEntryId === item.id ? "해제 중" : ""}</span>
+                              <span>
+                                {completingEntryId === item.id
+                                  ? isCompleted
+                                    ? "해제 중"
+                                    : "처리 중"
+                                  : ""}
+                              </span>
                             </button>
                           ) : null}
 
