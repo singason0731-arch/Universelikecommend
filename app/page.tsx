@@ -597,20 +597,34 @@ export default function Home() {
   };
 
   const handleRemoveSavedProfile = (profile: SavedProfile) => {
+    const profileKey = getProfileKey(profile.nickname, profile.userId);
     const nextProfiles = savedProfiles.filter(
       (savedProfile) =>
         getProfileKey(savedProfile.nickname, savedProfile.userId) !==
-        getProfileKey(profile.nickname, profile.userId)
+        profileKey
     );
 
     setSavedProfiles(nextProfiles);
     localStorage.setItem(MEMBER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
 
     if (
-      localStorage.getItem(ACTIVE_MEMBER_PROFILE_KEY) ===
-      getProfileKey(profile.nickname, profile.userId)
+      localStorage.getItem(ACTIVE_MEMBER_PROFILE_KEY) === profileKey
     ) {
       localStorage.removeItem(ACTIVE_MEMBER_PROFILE_KEY);
+    }
+
+    const savedNickname = localStorage.getItem("memberNickname");
+    const savedUserId = localStorage.getItem("memberUserId");
+    const savedProfileKey =
+      savedNickname && savedUserId
+        ? getProfileKey(savedNickname, normalizeMemberUserId(savedUserId))
+        : null;
+
+    if (savedProfileKey === profileKey) {
+      localStorage.removeItem("memberNickname");
+      localStorage.removeItem("memberUserId");
+      localStorage.removeItem("rememberMember");
+      setRememberMe(false);
     }
   };
 
