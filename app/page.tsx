@@ -148,6 +148,8 @@ export default function Home() {
     isPublicCollectedWindowOpen ||
     (isVerified && isMemberCollectedWindowOpen);
   const normalizedCurrentUserId = normalizeMemberUserId(userId);
+  const completionWindowMessage =
+    "오후 10시부터 다음날 오후 2시 30분 전까지 가능";
 
   const todayText = new Intl.DateTimeFormat("ko-KR", {
     year: "numeric",
@@ -721,7 +723,7 @@ export default function Home() {
     }
 
     if (!isCompletionWindowOpen) {
-      setErrorMessage("완료 처리는 오후 10시부터 다음날 오후 2시 30분 전까지 가능합니다.");
+      setErrorMessage(`완료 처리는 ${completionWindowMessage}합니다.`);
       return;
     }
 
@@ -1020,7 +1022,7 @@ export default function Home() {
 
   const getCollectedAccessMessage = () => {
     if (isAdminMode) {
-      return "운영진 모드에서는 시간과 관계없이 링크 확인, 취합, 수정이 가능합니다.";
+      return "운영진 모드에서는 링크 확인, 취합, 수정이 가능합니다.";
     }
 
     if (isPublicCollectedWindowOpen) {
@@ -1096,7 +1098,7 @@ export default function Home() {
               }}
             >
               <div style={{ fontSize: "13px", color: "#6d665d", lineHeight: 1.6, fontWeight: 600 }}>
-                운영진 모드가 활성화되어 링크 수정과 완 선택/해제가 가능합니다.
+                운영진 모드가 활성화되었습니다. 링크 수정은 상시 가능하고, 완 선택/해제는 {completionWindowMessage}합니다.
               </div>
 
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -1237,9 +1239,10 @@ export default function Home() {
                     const isCompleted = isSubmissionCompleted(item);
                     const isOwnItem = isOwnSubmission(item);
                     const hasLinks = hasSubmissionLinks(item);
-    const canCompleteThisItem =
-      isOwnItem && hasLinks && isCompletionWindowOpen && !isCompleted;
-    const canAdminToggleThisItem = isAdminMode && hasLinks && isCompletionWindowOpen;
+                    const canCompleteThisItem =
+                      isOwnItem && hasLinks && isCompletionWindowOpen && !isCompleted;
+                    const canAdminToggleThisItem =
+                      isAdminMode && hasLinks && isCompletionWindowOpen;
                     const mutedTextStyle: React.CSSProperties = isCompleted
                       ? {
                           color: "#9b978f",
@@ -1327,7 +1330,7 @@ export default function Home() {
                               </button>
                             ) : (
                               <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
-                                오후 10시부터 다음날 2시 30분 전까지 가능
+                                {completionWindowMessage}
                               </div>
                             )
                           ) : null}
@@ -1391,6 +1394,10 @@ export default function Home() {
                                   : ""}
                               </span>
                             </button>
+                          ) : isAdminMode && hasLinks ? (
+                            <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
+                              {completionWindowMessage}
+                            </div>
                           ) : null}
 
                           {isAdminMode && hasSubmissionLinks(item) ? (
