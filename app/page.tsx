@@ -69,6 +69,11 @@ type SavedProfile = {
   userId: string;
 };
 
+type QuickLoginPromptState = {
+  nickname: string;
+  userId: string;
+} | null;
+
 const SKIP_LIMIT = 7;
 const OPEN_TIME = "14:30";
 const CLOSE_TIME = "22:00";
@@ -139,6 +144,7 @@ export default function Home() {
   const [editingLink2, setEditingLink2] = useState("");
   const [isSavingAdminEdit, setIsSavingAdminEdit] = useState(false);
   const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
+  const [quickLoginPrompt, setQuickLoginPrompt] = useState<QuickLoginPromptState>(null);
   const [itemStatus, setItemStatus] = useState<ItemStatus>({
     canUseSkip: false,
     canUseTwofeed: false,
@@ -174,8 +180,8 @@ export default function Home() {
     cardBorder: isDarkMode ? "#27303a" : "#f1ede7",
     cardShadow: isDarkMode ? "0 10px 24px rgba(0,0,0,0.28)" : "0 6px 18px rgba(0,0,0,0.03)",
     text: isDarkMode ? "#f4efe8" : "#1f1f1f",
-    mutedText: isDarkMode ? "#b7ada0" : "#6d665d",
-    subText: isDarkMode ? "#8f9aa7" : "#7b6f60",
+    mutedText: isDarkMode ? "#ddd3c3" : "#6d665d",
+    subText: isDarkMode ? "#d2c7b8" : "#7b6f60",
     inputBackground: isDarkMode ? "#10151b" : "#fffdfb",
     inputBorder: isDarkMode ? "#33404d" : "#e5ddd2",
     chipBackground: isDarkMode ? "#1d252d" : "#f7f2ea",
@@ -185,7 +191,7 @@ export default function Home() {
     secondaryBackground: isDarkMode ? "#171d24" : "#ffffff",
     secondaryBorder: isDarkMode ? "#33404d" : "#e7dfd3",
     secondaryText: isDarkMode ? "#ece5d8" : "#2a2a2a",
-    panelBackground: isDarkMode ? "#121820" : "#faf7f3",
+    panelBackground: isDarkMode ? "#16202a" : "#faf7f3",
     panelBorder: isDarkMode ? "#2b3642" : "#e7ddd0",
     dashedBorder: isDarkMode ? "#394654" : "#e7ddd0",
     successBg: isDarkMode ? "#163022" : "#f4fbf5",
@@ -196,7 +202,7 @@ export default function Home() {
     errorText: isDarkMode ? "#ffcdcd" : "#6e2f2f",
     articleBackground: isDarkMode ? "#131921" : "#fffdfa",
     articleBorder: isDarkMode ? "#2c3743" : "#eee7dd",
-    dimmedText: isDarkMode ? "#7f8a96" : "#9b978f",
+    dimmedText: isDarkMode ? "#b7ad9f" : "#9b978f",
   };
 
   const todayText = new Intl.DateTimeFormat("ko-KR", {
@@ -298,6 +304,29 @@ export default function Home() {
     return "";
   };
 
+  const saveQuickLoginProfile = (profile: SavedProfile, sourceProfiles = savedProfiles) => {
+    const normalizedProfile = {
+      nickname: profile.nickname.trim(),
+      userId: normalizeMemberUserId(profile.userId),
+    };
+
+    const nextProfiles = [
+      normalizedProfile,
+      ...sourceProfiles.filter(
+        (savedProfile) =>
+          getProfileKey(savedProfile.nickname, savedProfile.userId) !==
+          getProfileKey(normalizedProfile.nickname, normalizedProfile.userId)
+      ),
+    ].slice(0, 6);
+
+    setSavedProfiles(nextProfiles);
+    localStorage.setItem(MEMBER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
+    localStorage.setItem(
+      ACTIVE_MEMBER_PROFILE_KEY,
+      getProfileKey(normalizedProfile.nickname, normalizedProfile.userId)
+    );
+  };
+
   const loadEntries = async (nicknameOverride?: string, userIdOverride?: string) => {
     try {
       setIsLoadingEntries(true);
@@ -333,6 +362,7 @@ export default function Home() {
     userIdOverride?: string,
     rememberOverride?: boolean
   ) => {
+    setQuickLoginPrompt(null);
     setAuthMessage("");
     setErrorMessage("");
     setSuccessMessage("");
@@ -347,6 +377,11 @@ export default function Home() {
     const nextNickname = (nicknameOverride ?? nickname).trim();
     const nextUserId = (userIdOverride ?? userId).trim();
     const nextRemember = rememberOverride ?? rememberMe;
+    const normalizedNextUserId = normalizeMemberUserId(nextUserId);
+    const nextProfileKey = getProfileKey(nextNickname, normalizedNextUserId);
+    const alreadySavedProfile = savedProfiles.some(
+      (profile) => getProfileKey(profile.nickname, profile.userId) === nextProfileKey
+    );
 
     if (!nextNickname || !nextUserId) {
       setAuthMessage("닉네임과 아이디를 모두 입력해야 합니다.");
@@ -390,26 +425,23 @@ export default function Home() {
 
         const nextProfile = {
           nickname: nextNickname,
-          userId: normalizeMemberUserId(nextUserId),
+          userId: normalizedNextUserId,
         };
-        const nextProfiles = [
-          nextProfile,
-          ...savedProfiles.filter(
-            (profile) => getProfileKey(profile.nickname, profile.userId) !==
-              getProfileKey(nextProfile.nickname, nextProfile.userId)
-          ),
-        ].slice(0, 6);
 
-        setSavedProfiles(nextProfiles);
-        localStorage.setItem(MEMBER_PROFILES_STORAGE_KEY, JSON.stringify(nextProfiles));
-        localStorage.setItem(
-          ACTIVE_MEMBER_PROFILE_KEY,
-          getProfileKey(nextProfile.nickname, nextProfile.userId)
-        );
+        if (alreadySavedProfile || savedProfiles.length === 0) {
+          saveQuickLoginProfile(nextProfile);
+        } else {
+          setQuickLoginPrompt(nextProfile);
+          localStorage.removeItem(ACTIVE_MEMBER_PROFILE_KEY);
+        }
       } else {
         localStorage.removeItem("memberNickname");
         localStorage.removeItem("memberUserId");
         localStorage.removeItem("rememberMember");
+
+        if (alreadySavedProfile) {
+          localStorage.setItem(ACTIVE_MEMBER_PROFILE_KEY, nextProfileKey);
+        }
       }
 
       await loadEntries(nextNickname, nextUserId);
@@ -440,6 +472,8 @@ export default function Home() {
     const savedRemember = localStorage.getItem("rememberMember");
     const savedAdminMode = localStorage.getItem("adminMode");
     const storedProfiles = localStorage.getItem(MEMBER_PROFILES_STORAGE_KEY);
+    const activeProfileKey = localStorage.getItem(ACTIVE_MEMBER_PROFILE_KEY);
+    let initialProfiles: SavedProfile[] = [];
 
     if (savedTheme === "dark" || savedTheme === "light") {
       setThemeMode(savedTheme);
@@ -449,11 +483,10 @@ export default function Home() {
       try {
         const parsedProfiles = JSON.parse(storedProfiles) as SavedProfile[];
         if (Array.isArray(parsedProfiles)) {
-          setSavedProfiles(
-            parsedProfiles.filter(
-              (profile) => profile?.nickname?.trim() && profile?.userId?.trim()
-            )
+          initialProfiles = parsedProfiles.filter(
+            (profile) => profile?.nickname?.trim() && profile?.userId?.trim()
           );
+          setSavedProfiles(initialProfiles);
         }
       } catch (error) {
         console.error(error);
@@ -468,6 +501,22 @@ export default function Home() {
       setTimeout(() => {
         handleVerifyMember(savedNickname, savedUserId, true);
       }, 200);
+    } else if (activeProfileKey) {
+      const activeProfile = initialProfiles.find(
+        (profile) => getProfileKey(profile.nickname, profile.userId) === activeProfileKey
+      );
+
+      if (activeProfile) {
+        setNickname(activeProfile.nickname);
+        setUserId(activeProfile.userId);
+        setRememberMe(false);
+
+        setTimeout(() => {
+          handleVerifyMember(activeProfile.nickname, activeProfile.userId, false);
+        }, 200);
+      } else {
+        loadEntries();
+      }
     } else {
       loadEntries();
     }
@@ -493,17 +542,19 @@ export default function Home() {
   }, []);
 
   const handleSelectSavedProfile = (profile: SavedProfile) => {
+    setQuickLoginPrompt(null);
     setNickname(profile.nickname);
     setUserId(profile.userId);
-    setRememberMe(true);
-    localStorage.setItem("memberNickname", profile.nickname);
-    localStorage.setItem("memberUserId", profile.userId);
-    localStorage.setItem("rememberMember", "true");
     localStorage.setItem(
       ACTIVE_MEMBER_PROFILE_KEY,
       getProfileKey(profile.nickname, profile.userId)
     );
-    void handleVerifyMember(profile.nickname, profile.userId, true);
+    if (rememberMe) {
+      localStorage.setItem("memberNickname", profile.nickname);
+      localStorage.setItem("memberUserId", profile.userId);
+      localStorage.setItem("rememberMember", "true");
+    }
+    void handleVerifyMember(profile.nickname, profile.userId, rememberMe);
   };
 
   const handleRemoveSavedProfile = (profile: SavedProfile) => {
@@ -522,6 +573,21 @@ export default function Home() {
     ) {
       localStorage.removeItem(ACTIVE_MEMBER_PROFILE_KEY);
     }
+  };
+
+  const handleSaveQuickLoginChoice = (shouldSave: boolean) => {
+    if (!quickLoginPrompt) return;
+
+    if (shouldSave) {
+      saveQuickLoginProfile(quickLoginPrompt);
+      setAuthMessage("멤버 인증이 완료되었습니다. 간편 로그인 계정으로 저장했어요.");
+    }
+
+    if (!shouldSave) {
+      setAuthMessage("멤버 인증이 완료되었습니다.");
+    }
+
+    setQuickLoginPrompt(null);
   };
 
   const handleSubmit = async () => {
@@ -1075,7 +1141,7 @@ export default function Home() {
   const toggleButtonStyle = (active: boolean, disabled = false): React.CSSProperties => ({
     padding: "12px 14px",
     borderRadius: "14px",
-    border: active ? "1px solid #1f1f1f" : "1px solid #e7dfd3",
+    border: active ? `1px solid ${theme.primary}` : `1px solid ${theme.secondaryBorder}`,
     background: disabled ? theme.panelBackground : active ? theme.primary : theme.secondaryBackground,
     color: disabled ? theme.dimmedText : active ? theme.primaryText : theme.secondaryText,
     cursor: disabled ? "not-allowed" : "pointer",
@@ -1189,7 +1255,7 @@ export default function Home() {
       <div
         style={{
           fontSize: "13px",
-          color: "#6d665d",
+          color: theme.mutedText,
           lineHeight: 1.7,
           fontWeight: 600,
           marginBottom: canViewCollected ? "12px" : "0",
@@ -1204,8 +1270,8 @@ export default function Home() {
             marginTop: "12px",
             padding: "14px",
             borderRadius: "16px",
-            background: isAdminMode ? "#fff7e8" : "#faf7f3",
-            border: isAdminMode ? "1px solid #f0d9a8" : "1px solid #e7ddd0",
+            background: isAdminMode ? theme.chipBackground : theme.panelBackground,
+            border: `1px solid ${isAdminMode ? theme.chipBorder : theme.panelBorder}`,
           }}
         >
           <div style={{ fontSize: "14px", fontWeight: 800, marginBottom: "8px" }}>
@@ -1222,7 +1288,7 @@ export default function Home() {
                 flexWrap: "wrap",
               }}
             >
-              <div style={{ fontSize: "13px", color: "#6d665d", lineHeight: 1.6, fontWeight: 600 }}>
+              <div style={{ fontSize: "13px", color: theme.mutedText, lineHeight: 1.6, fontWeight: 600 }}>
                 운영진 모드가 활성화되었습니다. 링크 수정은 상시 가능하고, 완 선택/해제는 {completionWindowMessage}합니다.
               </div>
 
@@ -1241,7 +1307,7 @@ export default function Home() {
             </div>
           ) : (
             <>
-              <div style={{ fontSize: "13px", color: "#6d665d", lineHeight: 1.6, fontWeight: 600 }}>
+              <div style={{ fontSize: "13px", color: theme.mutedText, lineHeight: 1.6, fontWeight: 600 }}>
                 운영진 비밀번호를 입력하면 모든 링크를 수정할 수 있습니다.
               </div>
 
@@ -1304,7 +1370,7 @@ export default function Home() {
 
                 <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                   {copyMessage ? (
-                    <span style={{ fontSize: "12px", color: "#6d665d", fontWeight: 700 }}>
+                    <span style={{ fontSize: "12px", color: theme.mutedText, fontWeight: 700 }}>
                       {copyMessage}
                     </span>
                   ) : null}
@@ -1319,10 +1385,10 @@ export default function Home() {
                   style={{
                     padding: "15px 14px",
                     borderRadius: "16px",
-                    background: "#faf7f3",
-                    border: "1px dashed #e7ddd0",
+                    background: theme.panelBackground,
+                    border: `1px dashed ${theme.dashedBorder}`,
                     fontSize: "14px",
-                    color: "#6f685f",
+                    color: theme.mutedText,
                     lineHeight: 1.6,
                   }}
                 >
@@ -1333,10 +1399,10 @@ export default function Home() {
                   style={{
                     padding: "15px 14px",
                     borderRadius: "16px",
-                    background: "#faf7f3",
-                    border: "1px dashed #e7ddd0",
+                    background: theme.panelBackground,
+                    border: `1px dashed ${theme.dashedBorder}`,
                     fontSize: "14px",
-                    color: "#6f685f",
+                    color: theme.mutedText,
                     lineHeight: 1.6,
                   }}
                 >
@@ -1370,19 +1436,19 @@ export default function Home() {
                       isAdminMode && hasLinks && isCompletionWindowOpen;
                     const mutedTextStyle: React.CSSProperties = isCompleted
                       ? {
-                          color: "#9b978f",
+                          color: theme.dimmedText,
                           textDecoration: "line-through",
                         }
                       : {
-                          color: "#2b2b2b",
+                          color: theme.text,
                         };
 
                     return (
                       <article
                         key={String(item.id)}
                         style={{
-                          background: "#fffdfa",
-                          border: "1px solid #eee7dd",
+                          background: theme.articleBackground,
+                          border: `1px solid ${theme.articleBorder}`,
                           borderRadius: "16px",
                           padding: "14px",
                         }}
@@ -1398,7 +1464,7 @@ export default function Home() {
                           }}
                         >
                           <div style={{ fontSize: "14px", fontWeight: 800, lineHeight: 1.7 }}>
-                            <span style={isCompleted ? { color: "#8e887f" } : undefined}>
+                            <span style={isCompleted ? { color: theme.dimmedText } : undefined}>
                               {displayIndex}. {item.nickname}
                               {displayUserId ? ` ${displayUserId}` : ""}
                               {typeLabel}
@@ -1425,7 +1491,7 @@ export default function Home() {
                                   lineHeight: 1.2,
                                   minWidth: "auto",
                                   color:
-                                    completingEntryId === item.id ? "#9b978f" : "#6d665d",
+                                    completingEntryId === item.id ? theme.dimmedText : theme.mutedText,
                                   cursor:
                                     completingEntryId === item.id ? "not-allowed" : "pointer",
                                 }}
@@ -1436,16 +1502,16 @@ export default function Home() {
                                     height: "21px",
                                     borderRadius: "4px",
                                     border: `1px solid ${
-                                      completingEntryId === item.id ? "#c8c2b8" : "#8c8478"
+                                      completingEntryId === item.id ? theme.panelBorder : theme.mutedText
                                     }`,
                                     display: "inline-flex",
                                     alignItems: "center",
                                     justifyContent: "center",
                                     fontSize: "11px",
                                     background:
-                                      completingEntryId === item.id ? "#f3efe8" : "#fffdfa",
+                                      completingEntryId === item.id ? theme.panelBackground : theme.articleBackground,
                                     color:
-                                      completingEntryId === item.id ? "#b0a89d" : "#6d665d",
+                                      completingEntryId === item.id ? theme.dimmedText : theme.mutedText,
                                     flexShrink: 0,
                                   }}
                                 >
@@ -1454,7 +1520,7 @@ export default function Home() {
                                 <span>{completingEntryId === item.id ? "처리 중" : ""}</span>
                               </button>
                             ) : (
-                              <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
+                              <div style={{ fontSize: "12px", color: theme.dimmedText, fontWeight: 700 }}>
                                 {completionWindowMessage}
                               </div>
                             )
@@ -1481,7 +1547,7 @@ export default function Home() {
                                 lineHeight: 1.2,
                                 minWidth: "auto",
                                 color:
-                                  completingEntryId === item.id ? "#9b978f" : "#6d665d",
+                                  completingEntryId === item.id ? theme.dimmedText : theme.mutedText,
                                 cursor:
                                   completingEntryId === item.id ? "not-allowed" : "pointer",
                               }}
@@ -1492,7 +1558,7 @@ export default function Home() {
                                   height: "21px",
                                   borderRadius: "4px",
                                   border: `1px solid ${
-                                    completingEntryId === item.id ? "#c8c2b8" : "#8c8478"
+                                    completingEntryId === item.id ? theme.panelBorder : theme.mutedText
                                   }`,
                                   display: "inline-flex",
                                   alignItems: "center",
@@ -1500,12 +1566,12 @@ export default function Home() {
                                   fontSize: "11px",
                                   background:
                                     completingEntryId === item.id
-                                      ? "#f3efe8"
+                                      ? theme.panelBackground
                                       : isCompleted
-                                      ? "#f3efe8"
-                                      : "#fffdfa",
+                                      ? theme.panelBackground
+                                      : theme.articleBackground,
                                   color:
-                                    completingEntryId === item.id ? "#b0a89d" : "#6d665d",
+                                    completingEntryId === item.id ? theme.dimmedText : theme.mutedText,
                                   flexShrink: 0,
                                 }}
                               >
@@ -1520,14 +1586,14 @@ export default function Home() {
                               </span>
                             </button>
                           ) : isAdminMode && hasLinks ? (
-                            <div style={{ fontSize: "12px", color: "#8e887f", fontWeight: 700 }}>
+                            <div style={{ fontSize: "12px", color: theme.dimmedText, fontWeight: 700 }}>
                               {completionWindowMessage}
                             </div>
                           ) : null}
 
                           {isAdminMode && hasSubmissionLinks(item) ? (
                             editingEntryId === item.id ? (
-                              <div style={{ fontSize: "12px", color: "#7a5f2d", fontWeight: 800 }}>
+                              <div style={{ fontSize: "12px", color: theme.subText, fontWeight: 800 }}>
                                 수정 중
                               </div>
                             ) : (
@@ -1565,9 +1631,9 @@ export default function Home() {
                                 disabled={isSavingAdminEdit}
                                 style={{
                                   ...copyButtonStyle,
-                                  background: "#1f1f1f",
-                                  color: "#ffffff",
-                                  border: "1px solid #1f1f1f",
+                                  background: theme.primary,
+                                  color: theme.primaryText,
+                                  border: `1px solid ${theme.primary}`,
                                   cursor: isSavingAdminEdit ? "not-allowed" : "pointer",
                                 }}
                               >
@@ -1681,13 +1747,13 @@ export default function Home() {
           >
             <div
               style={{
-                background: "#faf6ef",
-                border: "1px solid #eee4d3",
+                background: theme.chipBackground,
+                border: `1px solid ${theme.chipBorder}`,
                 borderRadius: "16px",
                 padding: "12px",
               }}
             >
-              <div style={{ fontSize: "12px", color: "#7b6f60", fontWeight: 700, marginBottom: "4px" }}>
+              <div style={{ fontSize: "12px", color: theme.subText, fontWeight: 700, marginBottom: "4px" }}>
                 날짜
               </div>
               <div style={{ fontSize: "14px", fontWeight: 800, lineHeight: 1.5 }}>
@@ -1697,13 +1763,13 @@ export default function Home() {
 
             <div
               style={{
-                background: "#faf6ef",
-                border: "1px solid #eee4d3",
+                background: theme.chipBackground,
+                border: `1px solid ${theme.chipBorder}`,
                 borderRadius: "16px",
                 padding: "12px",
               }}
             >
-              <div style={{ fontSize: "12px", color: "#7b6f60", fontWeight: 700, marginBottom: "4px" }}>
+              <div style={{ fontSize: "12px", color: theme.subText, fontWeight: 700, marginBottom: "4px" }}>
                 접수 시간
               </div>
               <div style={{ fontSize: "14px", fontWeight: 800, lineHeight: 1.5 }}>
@@ -1720,7 +1786,7 @@ export default function Home() {
 
           {savedProfiles.length > 0 ? (
             <div style={{ marginBottom: "14px" }}>
-              <div style={{ ...labelStyle, marginBottom: "10px" }}>저장된 로그인</div>
+              <div style={{ ...labelStyle, marginBottom: "10px" }}>간편 로그인</div>
               <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
                 {savedProfiles.map((profile) => {
                   const isActiveProfile =
@@ -1786,6 +1852,7 @@ export default function Home() {
                 setNickname(e.target.value);
                 setIsVerified(false);
                 setAuthMessage("");
+                setQuickLoginPrompt(null);
                 setAlreadyParticipatedToday(false);
                 setItemStatus({
                   canUseSkip: false,
@@ -1807,6 +1874,7 @@ export default function Home() {
                 setUserId(e.target.value);
                 setIsVerified(false);
                 setAuthMessage("");
+                setQuickLoginPrompt(null);
                 setAlreadyParticipatedToday(false);
                 setItemStatus({
                   canUseSkip: false,
@@ -1831,7 +1899,16 @@ export default function Home() {
             <input
               type="checkbox"
               checked={rememberMe}
-              onChange={(e) => setRememberMe(e.target.checked)}
+              onChange={(e) => {
+                const nextChecked = e.target.checked;
+                setRememberMe(nextChecked);
+
+                if (!nextChecked) {
+                  localStorage.removeItem("memberNickname");
+                  localStorage.removeItem("memberUserId");
+                  localStorage.removeItem("rememberMember");
+                }
+              }}
             />
             자동 로그인
           </label>
@@ -1850,8 +1927,8 @@ export default function Home() {
               style={{
                 marginTop: "12px",
                 ...messageBox(
-                  isVerified ? "#f4fbf5" : "#fff4f4",
-                  isVerified ? "#d7edd9" : "#f2d1d1"
+                  isVerified ? theme.successBg : theme.errorBg,
+                  isVerified ? theme.successBorder : theme.errorBorder
                 ),
               }}
             >
@@ -1860,24 +1937,61 @@ export default function Home() {
                   fontSize: "14px",
                   lineHeight: 1.6,
                   fontWeight: 700,
-                  color: isVerified ? "#2b4d30" : "#6e2f2f",
+                  color: isVerified ? theme.successText : theme.errorText,
                 }}
               >
                 {authMessage}
               </div>
             </div>
           )}
+
+          {quickLoginPrompt ? (
+            <div
+              style={{
+                marginTop: "12px",
+                ...messageBox(theme.panelBackground, theme.panelBorder),
+              }}
+            >
+              <div
+                style={{
+                  fontSize: "14px",
+                  lineHeight: 1.6,
+                  fontWeight: 700,
+                  color: theme.text,
+                  marginBottom: "12px",
+                }}
+              >
+                간편 로그인 계정으로 저장하시겠습니까?
+              </div>
+              <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                <button
+                  type="button"
+                  onClick={() => handleSaveQuickLoginChoice(true)}
+                  style={copyButtonStyle}
+                >
+                  예
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSaveQuickLoginChoice(false)}
+                  style={copyButtonStyle}
+                >
+                  아니오
+                </button>
+              </div>
+            </div>
+          ) : null}
         </section>
 
         <section
           style={{
             ...cardStyle,
-            background: isVerified ? "#fff8ee" : "#f7f7f7",
-            border: isVerified ? "1px solid #f3e3c7" : "1px solid #e5e5e5",
+            background: isVerified ? theme.chipBackground : theme.panelBackground,
+            border: `1px solid ${isVerified ? theme.chipBorder : theme.panelBorder}`,
           }}
         >
           <div>
-            <div style={{ fontSize: "12px", color: "#7b6f60", marginBottom: "4px", fontWeight: 700 }}>
+            <div style={{ fontSize: "12px", color: theme.subText, marginBottom: "4px", fontWeight: 700 }}>
               스킵 현황
             </div>
             <div style={{ fontSize: "17px", fontWeight: 900, lineHeight: 1.45 }}>
@@ -1889,22 +2003,22 @@ export default function Home() {
         </section>
 
         {successMessage && (
-          <section style={messageBox("#f4fbf5", "#d7edd9")}>
-            <div style={{ fontSize: "13px", fontWeight: 800, marginBottom: "6px", color: "#2f6a36" }}>
+          <section style={messageBox(theme.successBg, theme.successBorder)}>
+            <div style={{ fontSize: "13px", fontWeight: 800, marginBottom: "6px", color: theme.successText }}>
               제출 완료
             </div>
-            <div style={{ fontSize: "14px", lineHeight: 1.6, color: "#2b4d30", fontWeight: 600 }}>
+            <div style={{ fontSize: "14px", lineHeight: 1.6, color: theme.successText, fontWeight: 600 }}>
               {successMessage}
             </div>
           </section>
         )}
 
         {errorMessage && (
-          <section style={messageBox("#fff4f4", "#f2d1d1")}>
-            <div style={{ fontSize: "13px", fontWeight: 800, marginBottom: "6px", color: "#8a3131" }}>
+          <section style={messageBox(theme.errorBg, theme.errorBorder)}>
+            <div style={{ fontSize: "13px", fontWeight: 800, marginBottom: "6px", color: theme.errorText }}>
               확인 필요
             </div>
-            <div style={{ fontSize: "14px", lineHeight: 1.6, color: "#6e2f2f", fontWeight: 600 }}>
+            <div style={{ fontSize: "14px", lineHeight: 1.6, color: theme.errorText, fontWeight: 600 }}>
               {errorMessage}
             </div>
           </section>
@@ -1914,7 +2028,7 @@ export default function Home() {
           alreadyParticipatedToday ? (
             <>
               <section style={cardStyle}>
-                <div style={{ fontSize: "14px", lineHeight: 1.7, color: "#6d665d", fontWeight: 600 }}>
+                <div style={{ fontSize: "14px", lineHeight: 1.7, color: theme.mutedText, fontWeight: 600 }}>
                   오늘은 이미 참여완료 했어요.
                   <br />
                   취합된 링크만 확인할 수 있습니다.
@@ -1976,20 +2090,20 @@ export default function Home() {
                   <div style={{ fontSize: "19px", fontWeight: 900, marginBottom: "6px", lineHeight: 1.3 }}>
                     {formTitleMap[formType]}
                   </div>
-                  <div style={{ fontSize: "13px", color: "#7a746c", lineHeight: 1.6 }}>
+                  <div style={{ fontSize: "13px", color: theme.subText, lineHeight: 1.6 }}>
                     {formDescMap[formType]}
                   </div>
                 </div>
 
                 <div
                   style={{
-                    background: "#fcfaf7",
-                    border: "1px solid #eee6da",
+                    background: theme.panelBackground,
+                    border: `1px solid ${theme.panelBorder}`,
                     borderRadius: "16px",
                     padding: "14px",
                     marginBottom: "16px",
                     fontSize: "13px",
-                    color: "#6d665d",
+                    color: theme.mutedText,
                     lineHeight: 1.6,
                     fontWeight: 600,
                   }}
@@ -2114,10 +2228,10 @@ export default function Home() {
                     style={{
                       padding: "15px 14px",
                       borderRadius: "16px",
-                      background: "#faf7f3",
-                      border: "1px dashed #e7ddd0",
+                      background: theme.panelBackground,
+                      border: `1px dashed ${theme.dashedBorder}`,
                       fontSize: "14px",
-                      color: "#6f685f",
+                      color: theme.mutedText,
                       lineHeight: 1.6,
                     }}
                   >
@@ -2131,7 +2245,7 @@ export default function Home() {
                 onClick={handleSubmit}
                 style={{
                   ...primaryButtonStyle,
-                  background: !isFormOpen ? "#b8b8b8" : "#1f1f1f",
+                  background: !isFormOpen ? theme.dimmedText : theme.primary,
                   cursor: !isFormOpen ? "not-allowed" : "pointer",
                 }}
                 disabled={!isFormOpen}
@@ -2145,7 +2259,7 @@ export default function Home() {
         ) : (
           <>
             <section style={cardStyle}>
-              <div style={{ fontSize: "14px", lineHeight: 1.7, color: "#6d665d", fontWeight: 600 }}>
+              <div style={{ fontSize: "14px", lineHeight: 1.7, color: theme.mutedText, fontWeight: 600 }}>
                 멤버 인증이 완료되어야 접수 폼이 열립니다.
                 <br />
                 오후 10시 전까지는 취합된 링크도 로그인한 멤버만 확인할 수 있습니다.
