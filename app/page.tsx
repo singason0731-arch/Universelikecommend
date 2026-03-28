@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
 function cleanInstagramLink(url: string) {
   if (!url) return "";
@@ -98,6 +98,34 @@ function getSeoulNowMinutes() {
   return parseTimeToMinutes(timeText);
 }
 
+function getCurrentSessionKey() {
+  const now = new Date();
+  const dateText = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+
+  const currentMinutes = getSeoulNowMinutes();
+
+  if (currentMinutes >= parseTimeToMinutes(OPEN_TIME)) {
+    return dateText;
+  }
+
+  const yesterday = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Seoul" })
+  );
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Seoul",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(yesterday);
+}
+
 function normalizeMemberUserId(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -134,6 +162,7 @@ export default function Home() {
   const [showCollectedSection, setShowCollectedSection] = useState(false);
   const [submissions, setSubmissions] = useState<SubmissionItem[]>([]);
   const [nowMinutes, setNowMinutes] = useState(getSeoulNowMinutes());
+  const [currentSessionKey, setCurrentSessionKey] = useState(getCurrentSessionKey());
   const [alreadyParticipatedToday, setAlreadyParticipatedToday] = useState(false);
   const [completingEntryId, setCompletingEntryId] = useState<string | number | null>(null);
   const [adminPassword, setAdminPassword] = useState("");
@@ -145,6 +174,7 @@ export default function Home() {
   const [isSavingAdminEdit, setIsSavingAdminEdit] = useState(false);
   const [savedProfiles, setSavedProfiles] = useState<SavedProfile[]>([]);
   const [quickLoginPrompt, setQuickLoginPrompt] = useState<QuickLoginPromptState>(null);
+  const lastLoadedSessionKeyRef = useRef(currentSessionKey);
   const [itemStatus, setItemStatus] = useState<ItemStatus>({
     canUseSkip: false,
     canUseTwofeed: false,
@@ -575,10 +605,28 @@ export default function Home() {
   useEffect(() => {
     const timer = setInterval(() => {
       setNowMinutes(getSeoulNowMinutes());
+      setCurrentSessionKey(getCurrentSessionKey());
     }, 30000);
 
     return () => clearInterval(timer);
   }, []);
+
+  const refreshEntriesForCurrentSession = useEffectEvent(() => {
+    void loadEntries(isVerified ? nickname : undefined, isVerified ? userId : undefined);
+  });
+
+  useEffect(() => {
+    if (lastLoadedSessionKeyRef.current === currentSessionKey) {
+      return;
+    }
+
+    lastLoadedSessionKeyRef.current = currentSessionKey;
+    setAlreadyParticipatedToday(false);
+    setShowCollectedSection(false);
+    setSuccessMessage("");
+    setErrorMessage("");
+    refreshEntriesForCurrentSession();
+  }, [currentSessionKey]);
 
   const handleSelectSavedProfile = (profile: SavedProfile) => {
     setQuickLoginPrompt(null);
